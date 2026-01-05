@@ -4,6 +4,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.4.33110.190
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OpenGL_licenta", "OpenGL_licenta.vcxproj", "{6B04E977-0E49-4A77-A5CF-7CFCEDD7265A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B0AC434C-C913-8249-834C-2EAB9DC09891} = {B0AC434C-C913-8249-834C-2EAB9DC09891}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Bullet3Common", "bullet3-master\build3\vs2010\Bullet3Common.vcxproj", "{B0AC434C-C913-8249-834C-2EAB9DC09891}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +26,14 @@ Global
 		{6B04E977-0E49-4A77-A5CF-7CFCEDD7265A}.Release|x64.Build.0 = Release|x64
 		{6B04E977-0E49-4A77-A5CF-7CFCEDD7265A}.Release|x86.ActiveCfg = Release|Win32
 		{6B04E977-0E49-4A77-A5CF-7CFCEDD7265A}.Release|x86.Build.0 = Release|Win32
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Debug|x64.ActiveCfg = Debug|x64
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Debug|x64.Build.0 = Debug|x64
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Debug|x86.ActiveCfg = Debug|Win32
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Debug|x86.Build.0 = Debug|Win32
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Release|x64.ActiveCfg = Release|x64
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Release|x64.Build.0 = Release|x64
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Release|x86.ActiveCfg = Release|Win32
+		{B0AC434C-C913-8249-834C-2EAB9DC09891}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

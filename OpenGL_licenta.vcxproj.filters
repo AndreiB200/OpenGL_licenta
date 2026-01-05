@@ -22,6 +22,54 @@
     <Filter Include="Header Files\imgui">
       <UniqueIdentifier>{63932e3e-318c-46af-9e46-b00893011ca8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Main Shaders">
+      <UniqueIdentifier>{ed4020cd-bce3-489a-b3bf-148b42dfa195}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Voxelization">
+      <UniqueIdentifier>{4a858de8-a454-4d15-bf2c-7f5bd068d697}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\FrameBuffer">
+      <UniqueIdentifier>{bb50d0fe-de73-4511-bbe3-bee8490b66db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Shadow">
+      <UniqueIdentifier>{df58dbf7-cf35-4655-b1a8-b9ed369da45c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Debugging">
+      <UniqueIdentifier>{f537be82-717e-446f-8af6-3d63f0fa3ba4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\stb_image">
+      <UniqueIdentifier>{620b7e42-50a6-4bf2-bdc8-47f07b553647}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR">
+      <UniqueIdentifier>{f084aba8-e023-41bb-8650-3dd16314d499}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR\cubemap">
+      <UniqueIdentifier>{416f920a-fbb0-4d19-90fd-b4a72d708708}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR\background">
+      <UniqueIdentifier>{366aad7d-4054-40b1-8e31-e26766994c08}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR\BRDF">
+      <UniqueIdentifier>{b58adbae-1b81-4016-918e-3bf4e50604e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Debuggers class">
+      <UniqueIdentifier>{2febecb6-ee15-4397-926c-96bd6b65f735}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Debugging\bbVisual">
+      <UniqueIdentifier>{b3ccec2c-34e7-4ee9-9279-85025b2a0695}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR\PBR Shading">
+      <UniqueIdentifier>{04033fdd-2ea4-4660-9b05-ef033ef6bbaf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Scene">
+      <UniqueIdentifier>{1b2efe3f-edfd-472d-bbb8-2ba2b8c90f76}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\OpenGL_setting">
+      <UniqueIdentifier>{46914650-dc43-4271-88bd-a1d881d92726}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rendering">
+      <UniqueIdentifier>{5ed73b19-0e3d-4815-aa46-33c2da0ee010}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad.c">
@@ -56,12 +104,6 @@
     <ClInclude Include="Shader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="stb_image.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Camera.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="imgui\imstb_rectpack.h">
       <Filter>Header Files\imgui</Filter>
     </ClInclude>
@@ -89,49 +131,149 @@
     <ClInclude Include="imgui\imgui_impl_opengl3_loader.h">
       <Filter>Header Files\imgui</Filter>
     </ClInclude>
-    <ClInclude Include="Mesh.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="stb_image.h">
+      <Filter>Header Files\stb_image</Filter>
     </ClInclude>
-    <ClInclude Include="Model.h">
+    <ClInclude Include="stb_image_write.h">
+      <Filter>Header Files\stb_image</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Imgui_layer.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
+    <ClInclude Include="Porsche_texture.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
+    <ClInclude Include="StructuresHelpers.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
+    <ClInclude Include="Thread_Pool.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Scene.h">
+    <ClInclude Include="Mesh.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Transform.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="IBL.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Window.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OpenGL_Settings.h">
+      <Filter>Header Files\OpenGL_setting</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="ShadowMap.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="PrimitiveObj.h">
+      <Filter>Header Files\OpenGL_setting</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="vertex.vert">
-      <Filter>Shaders</Filter>
+    <None Include="voxelGen.vert">
+      <Filter>Shaders\Voxelization</Filter>
+    </None>
+    <None Include="voxelGen.geom">
+      <Filter>Shaders\Voxelization</Filter>
+    </None>
+    <None Include="voxelGen.frag">
+      <Filter>Shaders\Voxelization</Filter>
     </None>
     <None Include="fragment.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Main Shaders</Filter>
     </None>
-    <None Include="lightFragment.frag">
-      <Filter>Shaders</Filter>
+    <None Include="vertex.vert">
+      <Filter>Shaders\Main Shaders</Filter>
     </None>
-    <None Include="lightVertex.vert">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="frame.vert">
-      <Filter>Shaders</Filter>
+    <None Include="geometry.geom">
+      <Filter>Shaders\Main Shaders</Filter>
     </None>
     <None Include="frame.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\FrameBuffer</Filter>
     </None>
-    <None Include="shadow.vert">
-      <Filter>Shaders</Filter>
+    <None Include="frame.vert">
+      <Filter>Shaders\FrameBuffer</Filter>
     </None>
     <None Include="shadow.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Shadow</Filter>
     </None>
-    <None Include="shadow_debug.vert">
-      <Filter>Shaders</Filter>
+    <None Include="shadow.vert">
+      <Filter>Shaders\Shadow</Filter>
+    </None>
+    <None Include="lightFragment.frag">
+      <Filter>Shaders\Debugging</Filter>
+    </None>
+    <None Include="lightVertex.vert">
+      <Filter>Shaders\Debugging</Filter>
     </None>
     <None Include="shadow_debug.frag">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Debugging</Filter>
+    </None>
+    <None Include="shadow_debug.vert">
+      <Filter>Shaders\Debugging</Filter>
+    </None>
+    <None Include="cubemap.vert">
+      <Filter>Shaders\PBR\cubemap</Filter>
+    </None>
+    <None Include="rect_to_cube.frag">
+      <Filter>Shaders\PBR\cubemap</Filter>
+    </None>
+    <None Include="cube_irradiance.frag">
+      <Filter>Shaders\PBR\cubemap</Filter>
+    </None>
+    <None Include="background.vert">
+      <Filter>Shaders\PBR\background</Filter>
+    </None>
+    <None Include="background.frag">
+      <Filter>Shaders\PBR\background</Filter>
+    </None>
+    <None Include="cube_prefilter.frag">
+      <Filter>Shaders\PBR\cubemap</Filter>
+    </None>
+    <None Include="brdf.vert">
+      <Filter>Shaders\PBR\BRDF</Filter>
+    </None>
+    <None Include="brdf.frag">
+      <Filter>Shaders\PBR\BRDF</Filter>
+    </None>
+    <None Include="bbVisual.frag">
+      <Filter>Shaders\Debugging\bbVisual</Filter>
+    </None>
+    <None Include="bbVisual.geom">
+      <Filter>Shaders\Debugging\bbVisual</Filter>
+    </None>
+    <None Include="bbVisual.vert">
+      <Filter>Shaders\Debugging\bbVisual</Filter>
+    </None>
+    <None Include="cpp.hint" />
+    <None Include="pbr.frag">
+      <Filter>Shaders\PBR\PBR Shading</Filter>
+    </None>
+    <None Include="pbr.vert">
+      <Filter>Shaders\PBR\PBR Shading</Filter>
     </None>
   </ItemGroup>
 </Project>
