@@ -1,2 +1,0 @@
-C:\Users\user\source\repos\OpenGL_licenta\x64\Debug\OpenGL_licenta.exe
-C:\Users\user\Documents\GitHub\OpenGL_licenta\x64\Debug\OpenGL_licenta.exe
