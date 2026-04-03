@@ -5,7 +5,7 @@ in vec2 TexCoords;
 in vec3 WorldPos;
 in vec3 Normal;
 
-in vec4 WorldPosLightSpace;
+//in vec4 WorldPosLightSpace;
 
 // material parameters
 /*uniform vec3 u_albedo;
@@ -45,7 +45,7 @@ uniform vec3 camPos;
 
 const float PI = 3.14159265359;
 
-uniform float multi;
+//uniform float multi;
 
 vec3 bbMaxDefault = vec3(10.0, 10.0, 10.0); ////AABB hardcoded !
 vec3 bbMinDefault = vec3(-10.0, -10.0, -10.0);
@@ -219,8 +219,8 @@ void runLight()
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - metallic;	
  
-    float shadowCol, shadow = ShadowCalculation(WorldPosLightSpace);
-    shadowCol = 1.0 - shadow;
+    //float shadowCol, shadow = ShadowCalculation(WorldPosLightSpace);
+    //shadowCol = 1.0 - shadow;
 
     vec3 bbMax = vec3(3.0,4.0,3.0); ////AABB hardcoded !
     vec3 bbMin = vec3(-3.0,-1.0,-3.0);
@@ -245,10 +245,10 @@ void runLight()
 
     vec3 ambient = (kD * diffuse + specular) * ao;
     
-    vec3 color = (shadowCol+multi)*ambient + (shadowCol * Lo);
+    //vec3 color = (shadowCol+multi)*ambient + (shadowCol * Lo);
+    vec3 color = ambient + Lo;
 
-
-    // HDR tonemapping
+    // HDR tonemapping 
     color = (color / (color + vec3(1.0)));
 
     // gamma correct (baking process doesn't need gamma)

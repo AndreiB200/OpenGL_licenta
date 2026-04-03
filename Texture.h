@@ -78,9 +78,9 @@ public:
         if (parallel == true)
         {
             for (int i = 0; i < tex_info.size(); i++)
-                threads.addJob(std::bind(&Texture::data_loading, this, std::ref(tex_info[i]), dataPath[i].c_str(), directory));
+                Thread_Pool::getInstance().addJob(std::bind(&Texture::data_loading, this, std::ref(tex_info[i]), dataPath[i].c_str(), directory));
 
-            threads.wait();
+            Thread_Pool::getInstance().wait();
         }
         else
         {

@@ -93,7 +93,7 @@ public:
         
         if (threaded == true)
         {
-            threads.addJob(f);
+            Thread_Pool::getInstance().addJob(f);
             std::cout << "Thread initializat " << std::endl;
         }
         else

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
@@ -58,7 +58,10 @@ public:
         projection = _projection;
     }
 
-    void bindWindow(GLFWwindow* _window) { window = _window; }
+    void bindWindow(GLFWwindow* _window) 
+    { 
+        window = _window; 
+    }
 
     void keyListener(float cameraSpeed)
     {

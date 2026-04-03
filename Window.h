@@ -12,7 +12,7 @@ float yoffset = 0.0f;
 
 Camera* mycamera;
 
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+void mouse_callbackk(GLFWwindow* window, double xposIn, double yposIn)
 {
 	float xpos = static_cast<float>(xposIn);
 	float ypos = static_cast<float>(yposIn);
@@ -43,12 +43,7 @@ class Window
 public: 
 	GLFWwindow* window = nullptr;
 
-	void bindCamera(Camera* _camera)
-	{
-		mycamera = _camera;
-	}
-
-	Window(int WIDTH, int HEIGHT, const char *title)
+	Window(int WIDTH, int HEIGHT, Camera* camera, const char *title)
 	{
 		this->WIDTH = WIDTH;
 		this->HEIGHT = HEIGHT;
@@ -59,8 +54,11 @@ public:
 		glfwMakeContextCurrent(window);
 		glfwSetFramebufferSizeCallback(window, framebuffer_size);
 
-		glfwSetCursorPosCallback(window, mouse_callback);
+		glfwSetCursorPosCallback(window, mouse_callbackk);
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+		mycamera = camera;
+		mycamera->bindWindow(window);
 
 		lastX = WIDTH / 2.0f;
 		lastY = HEIGHT / 2.0f;
@@ -77,7 +75,7 @@ public:
 		else
 		{
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			glfwSetCursorPosCallback(window, mouse_callback);
+			glfwSetCursorPosCallback(window, mouse_callbackk);
 		}
 	}
 

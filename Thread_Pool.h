@@ -1,4 +1,6 @@
-#pragma once
+#ifndef Thread_Pool_h
+#define Thread_Pool_h
+
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -55,9 +57,15 @@ private:
 		}
 	}
 
+	Thread_Pool() { loadThreads(); }
 public:
 
-	Thread_Pool() { loadThreads(); }
+
+	static Thread_Pool& getInstance()
+	{
+		static Thread_Pool instance;
+		return instance;
+	}
 
 	void addJob(const std::function<void()>& job)
 	{
@@ -101,6 +109,11 @@ public:
 		}
 		threads.clear();
 	}
+
+	~Thread_Pool()
+	{
+		stop();
+	}
 };
 
-Thread_Pool threads;
+#endif //Thread_Pool_h

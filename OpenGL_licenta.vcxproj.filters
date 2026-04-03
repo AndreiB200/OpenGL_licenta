@@ -276,4 +276,9 @@
       <Filter>Shaders\PBR\PBR Shading</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include=".gitignore.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+  </ItemGroup>
 </Project>
