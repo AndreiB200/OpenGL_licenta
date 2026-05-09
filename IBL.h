@@ -132,7 +132,7 @@ public:
 
 	IBL() 
 	{ 
-		unsigned int captureFBO, captureRBO;
+		//unsigned int captureFBO, captureRBO;
 		glGenFramebuffers(1, &captureFBO);
 		glGenRenderbuffers(1, &captureRBO);
 		createCaptureViews(); 
@@ -168,6 +168,7 @@ public:
 		glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+		stbi_set_flip_vertically_on_load(true);
 		int width, height, nrComponents;
 		float* data = stbi_loadf(path, &width, &height, &nrComponents, 0);
 
