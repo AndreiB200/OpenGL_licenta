@@ -84,7 +84,7 @@ public:
 		sceneModels[0]->scale(1.0f);
 		sceneModels[0]->move(0.0f, 1.0f, 0.0f);
 		sceneModels[0]->rotate(-90.0f, X);
-		sceneModels[0]->setModelDynamic_ON();
+		//sceneModels[0]->setModelDynamic_ON();
 
 		sceneModels[1]->move(0.0f, -1.0f, 0.0f);
 		sceneModels[1]->scale(7.0f);

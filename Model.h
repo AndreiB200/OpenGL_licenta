@@ -109,16 +109,6 @@ public:
         loadMeshes();
     }
 
-    void setModelDynamic_ON()
-    {
-        dynamic = true;
-    }
-
-    void setModelDynamic_OFF()
-    {
-        dynamic = false;
-    }
-
 private:
     void loadMeshes()
     {

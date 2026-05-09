@@ -195,7 +195,6 @@ unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
 void renderCube()
 {
-    // initialize (if necessary)
     if (cubeVAO == 0)
     {
         float vertices[] = {
@@ -296,8 +295,6 @@ void renderQuad()
 
 int main()
 {	
-    // glfw: initialize and configure
-    // ------------------------------
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -306,43 +303,30 @@ int main()
 
     Window myWindow = Window(WIDTH, HEIGHT, &camera, "OpenGL");
 
-    // glad: load all OpenGL function pointers
-    // ---------------------------------------
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
-    //camera.bindWindow(window);
-
-    // configure global opengl state
-    // -----------------------------
-    glEnable(GL_DEPTH_TEST);
-    // set depth function to less than AND equal for skybox depth trick.
+    glEnable(GL_DEPTH_TEST);  
     glDepthFunc(GL_LEQUAL);
-    // enable seamless cubemap sampling for lower mip levels in the pre-filter map.
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-    // build and compile shaders
-    // -------------------------
     Shader pbrShader("pbr.vert", "pbr.frag");
-    Shader equirectangularToCubemapShader("cubemap.vert", "rect_to_cube.frag");
-    Shader irradianceShader("cubemap.vert", "cube_irradiance.frag");
-    Shader prefilterShader("cubemap.vert", "cube_prefilter.frag");
-    Shader brdfShader("brdf.vert", "brdf.frag");
-    Shader backgroundShader("background.vert", "background.frag");
-
+    
     pbrShader.use();
     pbrShader.setInt("irradianceMap", 0);
     pbrShader.setInt("prefilterMap", 1);
     pbrShader.setInt("brdfLUT", 2);
+
     pbrShader.setVec3("albedo", glm::vec3(0.5f, 0.0f, 0.0f));
     pbrShader.setFloat("ao", 1.0f);
 
-    backgroundShader.use();
-    backgroundShader.setInt("environmentMap", 0);
+    IBL ibl = IBL();
+    ibl.initCubeFromHDR("HDRI/map.hdr");
 
+    Model newModel = Model("Models/model.fbx");
 
     // lights
     // ------
@@ -359,24 +343,18 @@ int main()
     // pbr: setup framebuffer
     // ----------------------
 
-    IBL ibl = IBL();
-    ibl.initCubeFromHDR("HDRI/map.hdr");
 
     // initialize static shader uniforms before rendering
     // --------------------------------------------------
     glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
     pbrShader.use();
     pbrShader.setMat4("projection", projection);
-    backgroundShader.use();
-    backgroundShader.setMat4("projection", projection);
 
     // then before rendering, configure the viewport to the original framebuffer's screen dimensions
     //int scrWidth, scrHeight;
     //glfwGetFramebufferSize(window, &scrWidth, &scrHeight);
     glViewport(0, 0, WIDTH, HEIGHT);
 
-    // render loop
-    // -----------
     while (!glfwWindowShouldClose(myWindow.window))
     {
         // per-frame time logic
@@ -412,33 +390,17 @@ int main()
         // render rows*column number of spheres with varying metallic/roughness values scaled by rows and columns respectively
         glm::mat4 model = glm::mat4(1.0f);
         glm::mat3 normal = glm::mat3(1.0f);
-        for (int row = 0; row < nrRows; ++row)
-        {
-            pbrShader.setFloat("metallic", (float)row / (float)nrRows);
-            for (int col = 0; col < nrColumns; ++col)
-            {
-                // we clamp the roughness to 0.025 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off
-                // on direct lighting.
-                pbrShader.setFloat("roughness", glm::clamp((float)col / (float)nrColumns, 0.05f, 1.0f));
+        pbrShader.setFloat("metallic", 1.0);
+        pbrShader.setFloat("roughness", 0.5f);
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f,0.0f,0.0f));
+        
+        pbrShader.setMat4("model", model);
+        normal = glm::inverse(glm::mat3(model));
+        normal = glm::transpose(normal);
+        pbrShader.setMat3("normalMatrix", normal);
+        renderSphere();
 
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(
-                    (float)(col - (nrColumns / 2)) * spacing,
-                    (float)(row - (nrRows / 2)) * spacing,
-                    -2.0f
-                ));
-                pbrShader.setMat4("model", model);
-                normal = glm::inverse(glm::mat3(model));
-                normal = glm::transpose(normal);
-                pbrShader.setMat3("normalMatrix", normal);
-                renderSphere();
-            }
-        }
-
-
-        // render light source (simply re-render sphere at light positions)
-        // this looks a bit off as we use the same shader, but it'll make their positions obvious and 
-        // keeps the codeprint small.
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
             glm::vec3 newPos = lightPositions[i] + glm::vec3(sin(glfwGetTime() * 5.0) * 5.0, 0.0, 0.0);
@@ -453,33 +415,17 @@ int main()
             normal = glm::inverse(glm::mat3(model));
             normal = glm::transpose(normal);
             pbrShader.setMat3("normalMatrix", normal);
-            renderSphere();
+            //renderSphere();
+            //newModel.applyMatrix(pbrShader);
+            newModel.draw(pbrShader);
         }
 
-        // render skybox (render as last to prevent overdraw)
-        backgroundShader.use();
-        backgroundShader.setMat4("view", view);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, ibl.envCubeMap);
-         
-        glBindTexture(GL_TEXTURE_CUBE_MAP, ibl.irradianceMap); // display irradiance map
-        glBindTexture(GL_TEXTURE_CUBE_MAP, ibl.prefilterMap); // display prefilter map
-        renderCube();
+        ibl.drawBackground(view, projection);
 
-
-        // render BRDF map to screen
-        //brdfShader.Use();
-        //renderQuad();
-
-
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
         glfwSwapBuffers(myWindow.window);
         glfwPollEvents();
     }
 
-    // glfw: terminate, clearing all previously allocated GLFW resources.
-    // ------------------------------------------------------------------
     glfwTerminate();
     return 0;
 }

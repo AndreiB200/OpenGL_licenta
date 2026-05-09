@@ -410,4 +410,15 @@ public:
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		face++;
 	}
+
+	void drawBackground(glm::mat4 &view, glm::mat4& projection)
+	{
+		backgroundShader.use();
+		backgroundShader.setInt("environmentMap", 0);
+		backgroundShader.setMat4("view", view);
+		backgroundShader.setMat4("projection", projection);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, envCubeMap);
+		renderCube();
+	}
 };
