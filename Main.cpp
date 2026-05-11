@@ -35,6 +35,7 @@
 #include "ShadowMap.h"
 
 #include "PrimitiveObj.h"
+#include "DebuggerClass.h"
 
 //Scene
 unsigned int WIDTH = 1280;
@@ -330,15 +331,18 @@ int main()
 
 
     IBL ibl = IBL();
-    ibl.initCubeFromHDR("HDRI/map.hdr");
+    ibl.initCubeFromHDR("HDRI/mappo.hdr");
 
 
 
 
     //Model newModel = Model("Models/model.fbx");
     Model newModel = Model("Models/Porsche/porsche.fbx");
+    Model plane = Model("Models/Porsche/plane.fbx");
+
     newModel.rotate(-90, X);
     newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
+    plane.texture = newModel.texture;
 
     /*Texture textures;
     textures.texture2DPbr("Models/Porsche", "Models/Porsche/textures.txt");*/
@@ -352,7 +356,7 @@ int main()
         glm::vec3(-10.0f,  10.0f, 10.0f)
     };
     glm::vec3 lightColors[] = {
-        glm::vec3(300.0f, 300.0f, 300.0f)
+        glm::vec3(1.0f, 1.0f, 1.0f)
     };
     int nrRows = 7;
     int nrColumns = 7;
@@ -373,10 +377,24 @@ int main()
     //glfwGetFramebufferSize(window, &scrWidth, &scrHeight);
     glViewport(0, 0, WIDTH, HEIGHT);
 
+
     Imgui_layer::getInstance().Init(myWindow.window);
-    Imgui_layer::getInstance().addWidget(new Value("deltaTime", &deltaTime));
+    DebuggerClass imgui_helper;
+
+    Imgui_layer::getInstance().addWidget(new Value("deltaTime:", &deltaTime));
+
+    Imgui_layer::getInstance().addWidget(new ImGUI_text("Material select"));
+    Imgui_layer::getInstance().addWidget(new CheckBox("Secvential", &imgui_helper.secvential));
     Imgui_layer::getInstance().addWidget(new InputInt("Mesh ID", &newModel.selectMesh, 0, static_cast<int>(newModel.meshNumbers - 1)));
     Imgui_layer::getInstance().addWidget(new InputInt("Texture ID", &newModel.selectTexture, 0, static_cast<int>(newModel.texture.size() - 1)));
+
+    Imgui_layer::getInstance().addWidget(new ImGUI_text("Modify material"));
+    Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &imgui_helper.textureSelect, 0, 4));
+    Imgui_layer::getInstance().addWidget(new Slider3("Color",        imgui_helper.color, 0.0f, 1.0f));
+    Imgui_layer::getInstance().addWidget(new Slider("Metal",        &imgui_helper.metal, 0.0f, 1.0f));
+    Imgui_layer::getInstance().addWidget(new Slider("Roughness",    &imgui_helper.roughness, 0.0f, 1.0f));
+    Imgui_layer::getInstance().addWidget(new Slider3("Normal",       imgui_helper.normal, 0.0f, 1.0f));
+
 
     while (!glfwWindowShouldClose(myWindow.window))
     {
@@ -410,19 +428,7 @@ int main()
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, ibl.brdfLUTTexture);
 
-        // render rows*column number of spheres with varying metallic/roughness values scaled by rows and columns respectively
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::mat3 normal = glm::mat3(1.0f);
-        pbrShader.setFloat("metallic", 1.0);
-        pbrShader.setFloat("roughness", 0.5f);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f,0.0f,0.0f));
-        
-        pbrShader.setMat4("model", model);
-        normal = glm::inverse(glm::mat3(model));
-        normal = glm::transpose(normal);
-        pbrShader.setMat3("normalMatrix", normal);
-        //renderSphere();
+        imgui_helper.setShader(pbrShader);
 
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
@@ -432,7 +438,16 @@ int main()
             pbrShader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
 
             //newModel.draw(pbrShader);
-            newModel.drawDebug(pbrShader);
+            if (imgui_helper.secvential)
+            {
+                newModel.drawDebug(pbrShader);
+                plane.drawDebug(pbrShader);
+            }
+            else
+            {
+                newModel.draw(pbrShader);
+                plane.draw(pbrShader);
+            }
         }
 
         ibl.drawBackground(view, projection);

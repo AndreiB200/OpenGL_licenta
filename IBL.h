@@ -248,7 +248,7 @@ public:
 
 	void irradianceMapCreate(unsigned int& envCubeMap)
 	{
-		const unsigned int size = 4;
+		const unsigned int size = 32;
 		glGenTextures(1, &irradianceMap);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
 		for (unsigned int i = 0; i < 6; ++i)

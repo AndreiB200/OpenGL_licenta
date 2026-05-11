@@ -8,14 +8,10 @@ in vec3 Normal;
 //in vec4 WorldPosLightSpace;
 
 // material parameters
-/*uniform vec3 u_albedo;
-uniform float u_metallic;
-uniform float u_roughness;
-uniform float ao;*/
-
-vec3 u_albedo = vec3(0.7,0.7,0.7);
-float u_metallic = 0.0;
-float u_roughness = 0.0;
+uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
+uniform float u_metallic = 0.0;
+uniform float u_roughness = 0.0;
+uniform vec3 u_normal = vec3(0.0f, 0.0f, 0.0f);
 float ao = 0.8;
 
 uniform vec3 emision;
@@ -27,8 +23,8 @@ uniform sampler2D metallicMap;
 uniform sampler2D roughnessMap;
 
 //textures or parameter switch
-int Switch = 1;
-uniform bool start;
+uniform int textureSelect = 0;
+uniform bool start = false;
 
 //shadow map
 uniform sampler2D shadowMap;
@@ -163,23 +159,47 @@ void runLight()
     vec3 albedo;
     float metallic;
     float roughness;
-    vec3 N;
+    vec3 N = vec3(1.0,1.0,1.0);
   
-    if(Switch == 0)
+    if(textureSelect == 0)
     {   
         albedo = u_albedo;
         metallic = u_metallic;
         roughness = u_roughness;
         N = Normal;
     }
-    if(Switch == 1)
+    if(textureSelect == 1)
     {
         albedo = pow(texture(albedoMap, TexCoords).rgb, vec3(2.2));
-        metallic = texture(metallicMap, TexCoords).r;
-        roughness = texture(roughnessMap, TexCoords).r;
+        metallic = 1.0 - texture(metallicMap, TexCoords).r;
+        roughness = 1.0 - texture(roughnessMap, TexCoords).r;
         N = getNormalFromMap();
     }
-    //N = N - vec3(0.2);
+
+
+    if(textureSelect == 2)
+    {
+        albedo = pow(texture(albedoMap, TexCoords).rgb, vec3(2.2));
+        metallic = u_metallic;
+        roughness = u_roughness;
+        N = Normal;
+    }
+    if(textureSelect == 3)
+    {
+        albedo = pow(texture(metallicMap, TexCoords).rgb, vec3(2.2));
+        metallic = u_metallic;
+        roughness = u_roughness;
+        N = Normal;
+    }
+    if(textureSelect == 4)
+    {
+        albedo = pow(texture(roughnessMap, TexCoords).rgb, vec3(2.2));
+        metallic = u_metallic;
+        roughness = u_roughness;
+        N = Normal;
+    }
+
+
     vec3 V = normalize(camPos - WorldPos);
     vec3 R = reflect(-V, N); 
 
@@ -234,11 +254,11 @@ void runLight()
         totalRefletion = bbReflection(R, bbMax, bbMin, bbPos);
     }
 
-    vec3 irradiance = texture(irradianceMap, totalRefletion).rgb;
+    vec3 irradiance = texture(irradianceMap, N).rgb;
     vec3 diffuse    = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 prefilteredColor = textureLod(prefilterMap, totalRefletion,  roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 prefilteredColor = textureLod(prefilterMap, R,  roughness * MAX_REFLECTION_LOD).rgb;
 
     vec2 brdf  = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);

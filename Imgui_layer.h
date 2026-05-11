@@ -104,6 +104,7 @@ private:
 
 class CheckBox : public Widget
 {
+public:
 	CheckBox(const char* _name, bool* _value) :
 		name(_name), value(_value) {}
 
@@ -114,6 +115,30 @@ class CheckBox : public Widget
 private:
 	const char* name;
 	bool* value;
+};
+
+class SameLine : public Widget
+{
+public:
+	SameLine(){}
+
+	void run()
+	{
+		ImGui::SameLine();
+	}
+};
+
+class ImGUI_text : public Widget
+{
+public:
+	ImGUI_text(std::string _text): text(_text) {}
+
+	void run()
+	{
+		ImGui::Text(text.c_str());
+	}
+private:
+	std::string text = "";
 };
 
 
