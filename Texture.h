@@ -137,11 +137,8 @@ public:
         return textureID;
     }
 
-	unsigned int texture2Dfile(const char* path, const string& directory)
+	unsigned int texture2Dfile(const string& filename)
 	{
-        string filename = string(path);
-        filename = directory + '/' + filename;
-
         unsigned int textureID = 0;
 
         int width, height, nrComponents;
@@ -168,7 +165,7 @@ public:
         }
         else
         {
-            cout << "Texture failed to load at path: " << path << std::endl;
+            cout << "Texture failed to load at path: " << filename << std::endl;
             stbi_image_free(data);
         }
 

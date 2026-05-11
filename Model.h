@@ -50,6 +50,8 @@ public:
     string path;
     bool threaded = false;
 
+    unsigned int textureAlpha = 0;
+
     void applyMatrix(Shader& shader)
     {
         if (dynamic) 
@@ -82,6 +84,8 @@ public:
         glBindTexture(GL_TEXTURE_2D, texture[selectTexture].normal);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
         meshes[selectMesh].Draw(shader);
     }
     void draw(Shader& shader)
@@ -97,6 +101,10 @@ public:
             glBindTexture(GL_TEXTURE_2D, texture[i].normal);
             glActiveTexture(GL_TEXTURE6);
             glBindTexture(GL_TEXTURE_2D, texture[i].roughness);
+            if (i < 1) {
+                glActiveTexture(GL_TEXTURE7);
+                glBindTexture(GL_TEXTURE_2D, textureAlpha);
+            }
             meshes[i].Draw(shader);
         }
 }

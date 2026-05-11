@@ -21,6 +21,7 @@ uniform sampler2D albedoMap;
 uniform sampler2D normalMap;
 uniform sampler2D metallicMap;
 uniform sampler2D roughnessMap;
+uniform sampler2D alphaMap;
 
 //textures or parameter switch
 uniform int textureSelect = 0;
@@ -171,8 +172,8 @@ void runLight()
     if(textureSelect == 1)
     {
         albedo = pow(texture(albedoMap, TexCoords).rgb, vec3(2.2));
-        metallic = 1.0 - texture(metallicMap, TexCoords).r;
-        roughness = 1.0 - texture(roughnessMap, TexCoords).r;
+        metallic = texture(metallicMap, TexCoords).r;
+        roughness = texture(roughnessMap, TexCoords).r;
         N = getNormalFromMap();
     }
 
@@ -278,7 +279,7 @@ void runLight()
     if(start == false)
         color = pow(color, vec3(1.0/2.2)); 
 
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(color, texture(alphaMap, TexCoords).r);
     //FragColor = vec4(lightDebug, 1.0);
 }
 

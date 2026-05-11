@@ -325,15 +325,16 @@ int main()
     pbrShader.setFloat("ao", 1.0f);
 
     pbrShader.setInt("albedoMap", 3);
-    pbrShader.setInt("normalMap", 4);
-    pbrShader.setInt("metallicMap", 5);
+    pbrShader.setInt("metallicMap", 4);
+    pbrShader.setInt("normalMap", 5);
     pbrShader.setInt("roughnessMap", 6);
 
 
     IBL ibl = IBL();
     ibl.initCubeFromHDR("HDRI/mappo.hdr");
 
-
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 
     //Model newModel = Model("Models/model.fbx");
@@ -343,6 +344,8 @@ int main()
     newModel.rotate(-90, X);
     newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
     plane.texture = newModel.texture;
+
+    newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
 
     /*Texture textures;
     textures.texture2DPbr("Models/Porsche", "Models/Porsche/textures.txt");*/
