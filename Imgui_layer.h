@@ -65,6 +65,23 @@ private:
 	float range0, range1;
 };
 
+class InputInt : public Widget
+{
+public:
+	InputInt(const char* _name, int* _value, int _range0, int _range1) :
+		name(_name), value(_value), range0(_range0), range1(_range1) {
+	}
+
+	void run()
+	{
+		ImGui::SliderInt(name, value, range0, range1);
+	}
+private:
+	const char* name;
+	int* value;
+	int range0, range1;
+};
+
 
 class RadioButton : public Widget
 {
@@ -138,7 +155,7 @@ public:
 	{
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
-		io = ImGui::GetIO();
+		io = ImGui::GetIO(); (void)io;
 
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 460");

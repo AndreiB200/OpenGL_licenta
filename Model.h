@@ -36,13 +36,14 @@ public:
 
     bool dynamic = false;
     
-    vector<Mesh>    meshes;
-    vector<Texture_PBR> texture;
+    vector<Mesh>    meshes; int selectMesh = 0;
+    vector<Texture_PBR> texture; int selectTexture = 0;
 
     string          directory;
     bool            gammaCorrection;
 
     unsigned int totalPoly = 0;
+    int meshNumbers = 0;
     vector<vector<Vertex>> allVertices;
     vector<vector<unsigned int>> allIndices;
     
@@ -70,16 +71,35 @@ public:
         }
     }
 
-    void draw(Shader& shader, unsigned int x)
+    void drawDebug(Shader& shader)
     {
-        meshes[x].Draw(shader);
+        applyMatrix(shader);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].albedo);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].metallic);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].normal);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
+        meshes[selectMesh].Draw(shader);
     }
     void draw(Shader& shader)
     {
 		applyMatrix(shader);
-        for (unsigned int i = 0; i < meshes.size(); i++)
-            meshes[i].Draw(shader);       
-    }
+        for (unsigned int i = 0; i < meshNumbers; i++)
+        {
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, texture[i].albedo);
+            glActiveTexture(GL_TEXTURE4);
+            glBindTexture(GL_TEXTURE_2D, texture[i].metallic);
+            glActiveTexture(GL_TEXTURE5);
+            glBindTexture(GL_TEXTURE_2D, texture[i].normal);
+            glActiveTexture(GL_TEXTURE6);
+            glBindTexture(GL_TEXTURE_2D, texture[i].roughness);
+            meshes[i].Draw(shader);
+        }
+}
 
     void buildTexture(const char *directory, const char *path)
     {
@@ -123,11 +143,12 @@ private:
         allIndices.clear();
         allVertices.shrink_to_fit();
         std::cout << "Modelul este incarcat in GPU !" << std::endl;
+        meshNumbers = meshes.size();
     }
     void loadModel()
     {
         Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenSmoothNormals | /*aiProcess_FlipUVs*/  aiProcess_CalcTangentSpace);
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
             cout << "ASSIMP:: !! ERROR !! -> " << importer.GetErrorString() << endl;

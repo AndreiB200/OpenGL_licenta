@@ -171,10 +171,7 @@ public:
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, shadowMap->depthMap);
 
-		for (unsigned int i = 0; i < sceneModels.size(); i++)
-		{
-			sceneModels[i]->draw(shader, 0);
-		}
+		
 	}
 
 };

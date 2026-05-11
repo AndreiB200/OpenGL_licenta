@@ -17,7 +17,7 @@ enum Camera_Movement {
 // Default camera values
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 5.0f;
+const float SPEED = 10.0f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 
@@ -42,6 +42,8 @@ public:
     float Zoom;
 
     float cameraPosX = 0.0f, cameraPosZ = 0.0f;
+
+    bool isEditing = false;
 
     // constructor with vectors
     Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
@@ -77,6 +79,19 @@ public:
 
     void processInput(float &deltaTime)
     {
+        static bool altPressedLastFrame = false;
+        bool altCurrentlyPressed = (glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS);
+
+        // Detectăm "Rising Edge" (momentul în care apeși tasta)
+        if (altCurrentlyPressed && !altPressedLastFrame) 
+        {
+            toggleMouseMode();
+        }
+        altPressedLastFrame = altCurrentlyPressed;
+
+        // DACĂ suntem în modul editare, NU mai procesăm tastele de mișcare WASD
+        if (isEditing) return;
+
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
@@ -97,6 +112,9 @@ public:
 
     void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true)
     {
+        if (isEditing) {
+            return;
+        }
         xoffset *= MouseSensitivity;
         yoffset *= MouseSensitivity;
 
@@ -117,6 +135,19 @@ public:
     }
 
 private:
+    void toggleMouseMode() 
+    {
+        isEditing = !isEditing;
+        if (isEditing) 
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+        else 
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
+    }
+
     void ProcessKeyboard(Camera_Movement direction, float deltaTime)
     {
         float velocity = MovementSpeed * deltaTime;

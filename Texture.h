@@ -39,7 +39,7 @@ struct data_texture_f
 class Texture
 {
 private:
-    bool parallel = true;
+    bool parallel = false;
 
     void data_loading(data_texture& data, const char* path, const string& directory)
     {
@@ -90,7 +90,7 @@ public:
             }
         }
 
-        for (int i = 0; i < 1;)
+        for (int i = 0; i < tex_info.size();)
         {
             Texture_PBR texture;
             texture.albedo      = texture2Dfile(tex_info[i]);

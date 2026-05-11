@@ -45,7 +45,7 @@ unsigned int HEIGHT = 720;
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
@@ -323,10 +323,28 @@ int main()
     pbrShader.setVec3("albedo", glm::vec3(0.5f, 0.0f, 0.0f));
     pbrShader.setFloat("ao", 1.0f);
 
+    pbrShader.setInt("albedoMap", 3);
+    pbrShader.setInt("normalMap", 4);
+    pbrShader.setInt("metallicMap", 5);
+    pbrShader.setInt("roughnessMap", 6);
+
+
     IBL ibl = IBL();
     ibl.initCubeFromHDR("HDRI/map.hdr");
 
-    Model newModel = Model("Models/model.fbx");
+
+
+
+    //Model newModel = Model("Models/model.fbx");
+    Model newModel = Model("Models/Porsche/porsche.fbx");
+    newModel.rotate(-90, X);
+    newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
+
+    /*Texture textures;
+    textures.texture2DPbr("Models/Porsche", "Models/Porsche/textures.txt");*/
+
+
+
 
     // lights
     // ------
@@ -354,6 +372,11 @@ int main()
     //int scrWidth, scrHeight;
     //glfwGetFramebufferSize(window, &scrWidth, &scrHeight);
     glViewport(0, 0, WIDTH, HEIGHT);
+
+    Imgui_layer::getInstance().Init(myWindow.window);
+    Imgui_layer::getInstance().addWidget(new Value("deltaTime", &deltaTime));
+    Imgui_layer::getInstance().addWidget(new InputInt("Mesh ID", &newModel.selectMesh, 0, static_cast<int>(newModel.meshNumbers - 1)));
+    Imgui_layer::getInstance().addWidget(new InputInt("Texture ID", &newModel.selectTexture, 0, static_cast<int>(newModel.texture.size() - 1)));
 
     while (!glfwWindowShouldClose(myWindow.window))
     {
@@ -399,7 +422,7 @@ int main()
         normal = glm::inverse(glm::mat3(model));
         normal = glm::transpose(normal);
         pbrShader.setMat3("normalMatrix", normal);
-        renderSphere();
+        //renderSphere();
 
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
@@ -408,19 +431,13 @@ int main()
             pbrShader.setVec3("lightPositions[" + std::to_string(i) + "]", newPos);
             pbrShader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
 
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, newPos);
-            model = glm::scale(model, glm::vec3(0.5f));
-            pbrShader.setMat4("model", model);
-            normal = glm::inverse(glm::mat3(model));
-            normal = glm::transpose(normal);
-            pbrShader.setMat3("normalMatrix", normal);
-            //renderSphere();
-            //newModel.applyMatrix(pbrShader);
-            newModel.draw(pbrShader);
+            //newModel.draw(pbrShader);
+            newModel.drawDebug(pbrShader);
         }
 
         ibl.drawBackground(view, projection);
+
+        Imgui_layer::getInstance().Update();
 
         glfwSwapBuffers(myWindow.window);
         glfwPollEvents();

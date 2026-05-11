@@ -27,7 +27,7 @@ uniform sampler2D metallicMap;
 uniform sampler2D roughnessMap;
 
 //textures or parameter switch
-int Switch = 0;
+int Switch = 1;
 uniform bool start;
 
 //shadow map
@@ -179,7 +179,7 @@ void runLight()
         roughness = texture(roughnessMap, TexCoords).r;
         N = getNormalFromMap();
     }
-    N = N - vec3(0.2);
+    //N = N - vec3(0.2);
     vec3 V = normalize(camPos - WorldPos);
     vec3 R = reflect(-V, N); 
 
