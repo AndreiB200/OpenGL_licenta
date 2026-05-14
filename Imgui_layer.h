@@ -49,6 +49,28 @@ private:
 	float range0, range1;
 };
 
+class VecSlider3 : public Widget
+{
+public:
+	VecSlider3(const char* _name, glm::vec3* _value, float _range0, float _range1) :
+		name(_name), value(_value), range0(_range0), range1(_range1) {
+	}
+
+	void run()
+	{
+		values[0] = value->x; values[1] = value->y; values[2] = value->z;
+		ImGui::SliderFloat3(name, values, range0, range1);
+		value->x = values[0];
+		value->y = values[1];
+		value->z = values[2];
+	}
+private:
+	const char* name;
+	glm::vec3* value;
+	float values[3];
+	float range0, range1;
+};
+
 class Slider : public Widget
 {
 public:
@@ -63,6 +85,41 @@ private:
 	const char* name;
 	float* value;
 	float range0, range1;
+};
+
+class DragFloat : public Widget
+{
+public:
+	DragFloat(const char* _name, float* _value, float _steps) :
+		name(_name), value(_value), steps(_steps) {
+	}
+
+	void run()
+	{
+		ImGui::DragFloat(name, value, steps);
+	}
+private:
+	const char* name;
+	float* value;
+	float steps;
+};
+
+class DragPosRotScale : public Widget
+{
+public:
+	DragPosRotScale(glm::vec3* _input, float _steps) :
+		input(_input), steps(_steps) {
+	}
+
+	void run()
+	{
+		ImGui::DragFloat("X:", &input->x, steps);
+		ImGui::DragFloat("Y:", &input->y, steps);
+		ImGui::DragFloat("Z:", &input->z, steps);
+	}
+private:
+	glm::vec3* input;
+	float steps;
 };
 
 class InputInt : public Widget
@@ -163,7 +220,9 @@ public:
 
 		for (int i = 0; i < widgetList.size(); i++)
 		{
+			ImGui::PushID(i);
 			widgetList[i]->run();
+			ImGui::PopID();
 		}
 
 		getVRAM();

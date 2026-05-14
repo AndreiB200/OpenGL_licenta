@@ -1,5 +1,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 enum axis
 {
@@ -10,8 +12,12 @@ class Transform
 {
 public:
     glm::mat4 model = glm::mat4(1.0f);
+
     glm::vec3 position = glm::vec3(0.0f);
+
+    float modelSize = 1.0f;
     glm::vec3 size = glm::vec3(1.0f);
+
     float axisX, axisY, axisZ, degrees;
     glm::vec3 rotation = glm::vec3(0.0f);
 
@@ -40,6 +46,11 @@ public:
         size = glm::vec3(x);
         model = glm::scale(model, size);
     }
+    void scale(glm::vec3 xyz)
+    {
+        size = glm::vec3(xyz);
+        model = glm::scale(model, size);
+    }
 
     void rotate(float m_degrees, axis axisR)
     {
@@ -52,6 +63,20 @@ public:
             rotation = glm::vec3(0.0f, 0.0f, 1.0f);
 
         model = glm::rotate(model, glm::radians(m_degrees), rotation);
+    }
+
+    void rotate_Q(glm::vec3 _rotation)
+    {
+        rotation = _rotation;
+        glm::vec3 convert = glm::vec3(glm::radians(_rotation.x), glm::radians(_rotation.y), glm::radians(_rotation.z));
+        glm::quat quaternion = glm::quat(convert);
+
+        model = model * glm::toMat4(quaternion);
+    }
+
+    void resetMatrix()
+    {
+        model = glm::mat4(1.0f);
     }
 
 };

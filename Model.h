@@ -34,7 +34,7 @@ class Model: public Transform
 public:
     bool model_loaded = false;
 
-    bool dynamic = false;
+    bool dynamic = true;
     
     vector<Mesh>    meshes; int selectMesh = 0;
     vector<Texture_PBR> texture; int selectTexture = 0;
@@ -56,12 +56,12 @@ public:
     {
         if (dynamic) 
         {
-            glm::mat4 d_model = glm::mat4(1.0f);
-            d_model = glm::translate(d_model, position);
-            d_model = glm::scale(d_model, size);
-            d_model = glm::rotate(d_model, glm::radians(degrees), rotation);
-            shader.setMat4("model", d_model);
-            glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(d_model)));
+            resetMatrix();
+            move(position);
+            rotate_Q(rotation);
+            scale(size);
+            shader.setMat4("model", model);
+            glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
             shader.setMat3("normalMatrix", normal);
         }
 
@@ -88,11 +88,20 @@ public:
         glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
         meshes[selectMesh].Draw(shader);
     }
+
+    void drawSimple(Shader& shader)
+    {
+        applyMatrix(shader);
+        meshes[selectMesh].Draw(shader);
+    }
+
     void draw(Shader& shader)
     {
 		applyMatrix(shader);
         for (unsigned int i = 0; i < meshNumbers; i++)
         {
+            glDisable(GL_BLEND);
+            shader.setBool("useAlpha", false);
             glActiveTexture(GL_TEXTURE3);
             glBindTexture(GL_TEXTURE_2D, texture[i].albedo);
             glActiveTexture(GL_TEXTURE4);
@@ -101,13 +110,23 @@ public:
             glBindTexture(GL_TEXTURE_2D, texture[i].normal);
             glActiveTexture(GL_TEXTURE6);
             glBindTexture(GL_TEXTURE_2D, texture[i].roughness);
-            if (i < 1) {
+            if (i < 1 && textureAlpha != 0) {
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 glActiveTexture(GL_TEXTURE7);
                 glBindTexture(GL_TEXTURE_2D, textureAlpha);
+                shader.setBool("useAlpha", true);
             }
             meshes[i].Draw(shader);
         }
-}
+    }
+
+    void drawShadow(Shader& shader)
+    {
+        applyMatrix(shader);
+        for (unsigned int i = 0; i < meshNumbers; i++)
+            meshes[i].Draw(shader);
+    }
 
     void buildTexture(const char *directory, const char *path)
     {
@@ -156,7 +175,7 @@ private:
     void loadModel()
     {
         Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenSmoothNormals | /*aiProcess_FlipUVs*/  aiProcess_CalcTangentSpace);
+        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate  |  aiProcess_CalcTangentSpace);
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
             cout << "ASSIMP:: !! ERROR !! -> " << importer.GetErrorString() << endl;

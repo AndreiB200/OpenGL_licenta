@@ -328,28 +328,45 @@ int main()
     pbrShader.setInt("metallicMap", 4);
     pbrShader.setInt("normalMap", 5);
     pbrShader.setInt("roughnessMap", 6);
+    pbrShader.setInt("alphaMap", 7);
 
 
     IBL ibl = IBL();
     ibl.initCubeFromHDR("HDRI/mappo.hdr");
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    Model newModel = Model("Models/model.fbx");
+    //Model newModel = Model("Models/Porsche/porsche.fbx");
+    newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
+    newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
+    newModel.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
 
 
-    //Model newModel = Model("Models/model.fbx");
-    Model newModel = Model("Models/Porsche/porsche.fbx");
+    Model floor = Model("Models/Env/floor.fbx");
+    floor.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
+    floor.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
+
+
+    Model metal = Model("Models/Env/metal.fbx");
+    metal.buildTexture("Models/Env", "Models/Env/textures_metal.txt");
+    metal.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
+
+
+    Model proxy = Model("Models/Porsche/porsche_proxy.fbx");
+    proxy.rotate(-90, X);
+
+
     Model plane = Model("Models/Porsche/plane.fbx");
 
-    newModel.rotate(-90, X);
-    newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
     plane.texture = newModel.texture;
 
-    newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
 
-    /*Texture textures;
-    textures.texture2DPbr("Models/Porsche", "Models/Porsche/textures.txt");*/
-
+    std::vector<Model*> models = { 
+        &newModel, 
+        //&proxy, 
+        &floor, 
+        &metal, 
+        &plane };
 
 
 
@@ -375,9 +392,7 @@ int main()
     pbrShader.use();
     pbrShader.setMat4("projection", projection);
 
-    // then before rendering, configure the viewport to the original framebuffer's screen dimensions
-    //int scrWidth, scrHeight;
-    //glfwGetFramebufferSize(window, &scrWidth, &scrHeight);
+    
     glViewport(0, 0, WIDTH, HEIGHT);
 
 
@@ -398,7 +413,25 @@ int main()
     Imgui_layer::getInstance().addWidget(new Slider("Roughness",    &imgui_helper.roughness, 0.0f, 1.0f));
     Imgui_layer::getInstance().addWidget(new Slider3("Normal",       imgui_helper.normal, 0.0f, 1.0f));
 
+    for (int i = 0; i < models.size(); i++)
+    {
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
 
+        std::string modelNumber = "Model##" + std::to_string(i);
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(modelNumber));
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("POSITION"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->position, 0.01f));
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("ROTATE"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->rotation, 0.01f));
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("SCALE"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->size, 0.01f));
+    }
+
+
+    OpenGL_Settings::getInstance().enableCullFace(false);
     while (!glfwWindowShouldClose(myWindow.window))
     {
         // per-frame time logic
@@ -443,17 +476,17 @@ int main()
             //newModel.draw(pbrShader);
             if (imgui_helper.secvential)
             {
-                newModel.drawDebug(pbrShader);
-                plane.drawDebug(pbrShader);
+                for (int i = 0; i < models.size(); i++)
+                    models[i]->drawDebug(pbrShader);
             }
             else
             {
-                newModel.draw(pbrShader);
-                plane.draw(pbrShader);
+                for (int i = 0; i < models.size(); i++)
+                    models[i]->draw(pbrShader);
             }
         }
 
-        ibl.drawBackground(view, projection);
+        //ibl.drawBackground(view, projection);
 
         Imgui_layer::getInstance().Update();
 

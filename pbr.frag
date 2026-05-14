@@ -13,6 +13,7 @@ uniform float u_metallic = 0.0;
 uniform float u_roughness = 0.0;
 uniform vec3 u_normal = vec3(0.0f, 0.0f, 0.0f);
 float ao = 0.8;
+uniform bool useAlpha = false;
 
 uniform vec3 emision;
 
@@ -22,6 +23,7 @@ uniform sampler2D normalMap;
 uniform sampler2D metallicMap;
 uniform sampler2D roughnessMap;
 uniform sampler2D alphaMap;
+
 
 //textures or parameter switch
 uniform int textureSelect = 0;
@@ -279,7 +281,11 @@ void runLight()
     if(start == false)
         color = pow(color, vec3(1.0/2.2)); 
 
-    FragColor = vec4(color, texture(alphaMap, TexCoords).r);
+    float alphaVal = 1.0;
+    if(useAlpha)
+        alphaVal = texture(alphaMap, TexCoords).r;
+
+    FragColor = vec4(color, alphaVal);
     //FragColor = vec4(lightDebug, 1.0);
 }
 
