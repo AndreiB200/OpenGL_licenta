@@ -226,7 +226,7 @@ public:
 		}
 
 		getVRAM();
-		
+
 		Render();
 	}
 

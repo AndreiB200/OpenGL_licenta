@@ -29,6 +29,12 @@
 
 using namespace std;
 
+struct BoundingBox
+{
+    glm::vec3 min = glm::vec3(std::numeric_limits<float>::min());
+    glm::vec3 max = glm::vec3(std::numeric_limits<float>::max());
+};
+
 class Model: public Transform
 {
 public:
@@ -51,6 +57,7 @@ public:
     bool threaded = false;
 
     unsigned int textureAlpha = 0;
+    BoundingBox boundingBox;
 
     void applyMatrix(Shader& shader)
     {
@@ -76,15 +83,15 @@ public:
     void drawDebug(Shader& shader)
     {
         applyMatrix(shader);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].albedo);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].metallic);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].albedo);
         glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].normal);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].metallic);
         glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].normal);
         glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
+        glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_2D, texture[selectTexture].roughness);
         meshes[selectMesh].Draw(shader);
     }
@@ -102,18 +109,18 @@ public:
         {
             glDisable(GL_BLEND);
             shader.setBool("useAlpha", false);
-            glActiveTexture(GL_TEXTURE3);
-            glBindTexture(GL_TEXTURE_2D, texture[i].albedo);
             glActiveTexture(GL_TEXTURE4);
-            glBindTexture(GL_TEXTURE_2D, texture[i].metallic);
+            glBindTexture(GL_TEXTURE_2D, texture[i].albedo);
             glActiveTexture(GL_TEXTURE5);
-            glBindTexture(GL_TEXTURE_2D, texture[i].normal);
+            glBindTexture(GL_TEXTURE_2D, texture[i].metallic);
             glActiveTexture(GL_TEXTURE6);
+            glBindTexture(GL_TEXTURE_2D, texture[i].normal);
+            glActiveTexture(GL_TEXTURE7);
             glBindTexture(GL_TEXTURE_2D, texture[i].roughness);
             if (i < 1 && textureAlpha != 0) {
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glActiveTexture(GL_TEXTURE7);
+                glActiveTexture(GL_TEXTURE8);
                 glBindTexture(GL_TEXTURE_2D, textureAlpha);
                 shader.setBool("useAlpha", true);
             }
@@ -208,6 +215,7 @@ private:
             Vertex vertex;
             glm::vec3 vector;
             vector.x = mesh->mVertices[i].x; vector.y = mesh->mVertices[i].y; vector.z = mesh->mVertices[i].z;
+            getMinMaxAABB(vector);
             vertex.Position = vector;
             if (mesh->HasNormals())
             {
@@ -247,6 +255,17 @@ private:
         allVertices.push_back(vertices);
         allIndices.push_back(indices);
         std::cout << allVertices.size() << std::endl;
+    }
+
+    void getMinMaxAABB(glm::vec3 v)
+    {
+        boundingBox.min.x = std::min(boundingBox.min.x, v.x);
+        boundingBox.min.y = std::min(boundingBox.min.y, v.y);
+        boundingBox.min.z = std::min(boundingBox.min.z, v.z);
+
+        boundingBox.max.x = std::max(boundingBox.max.x, v.x);
+        boundingBox.max.y = std::max(boundingBox.max.y, v.y);
+        boundingBox.max.z = std::max(boundingBox.max.z, v.z);
     }
 };
 #endif

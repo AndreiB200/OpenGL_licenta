@@ -1,10 +1,10 @@
-#pragma once
+#define _TIMER_
+#ifdef _TIMER_
 
-//#include <iostream>
 #include <chrono>
 #include <thread>
 
-enum type {
+enum time_type {
 	nano,
 	micro,
 	mili,
@@ -19,20 +19,22 @@ public:
 	std::chrono::system_clock::time_point start;
 	std::chrono::system_clock::time_point end;
 
+	Timer(){}
+
 	void startClock()
 	{
 		start = std::chrono::system_clock::now();
 	}
 
-	float stopClock(type timeMode)
+	float stopClock(time_type timeMode)
 	{
 		end = std::chrono::system_clock::now();
 		float duration = 0.0f;
-		if (timeMode == micro)
+		if (timeMode == time_type::micro)
 			duration = std::chrono::duration<float, std::micro>(end - start).count();
-		else if (timeMode == mili)
+		else if (timeMode == time_type::mili)
 			duration = std::chrono::duration<float, std::milli>(end - start).count();
-		else if (timeMode == sec)
+		else if (timeMode == time_type::sec)
 			duration = std::chrono::duration<float>(end - start).count();
 
 		time = duration;
@@ -40,3 +42,5 @@ public:
 		return duration;
 	}
 };
+
+#endif // !_TIMER_

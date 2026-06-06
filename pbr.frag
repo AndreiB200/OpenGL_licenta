@@ -5,14 +5,14 @@ in vec2 TexCoords;
 in vec3 WorldPos;
 in vec3 Normal;
 
-//in vec4 WorldPosLightSpace;
+in vec4 WorldPosLightSpace;
 
 // material parameters
 uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
 uniform float u_metallic = 0.0;
 uniform float u_roughness = 0.0;
 uniform vec3 u_normal = vec3(0.0f, 0.0f, 0.0f);
-float ao = 0.8;
+uniform float ao = 1.0;
 uniform bool useAlpha = false;
 
 uniform vec3 emision;
@@ -31,6 +31,7 @@ uniform bool start = false;
 
 //shadow map
 uniform sampler2D shadowMap;
+uniform float multiplayer = 0.0f;
 
 // IBL
 uniform samplerCube irradianceMap;
@@ -49,6 +50,10 @@ const float PI = 3.14159265359;
 vec3 bbMaxDefault = vec3(10.0, 10.0, 10.0); ////AABB hardcoded !
 vec3 bbMinDefault = vec3(-10.0, -10.0, -10.0);
 vec3 bbPosDefault = vec3(0.0, 0.0, 0.0);
+
+uniform float shadowUp = 0.05;
+uniform float shadowBias = 0.001;
+uniform int pcfSize = 3;
 
 vec3 lightDebug;
 
@@ -76,20 +81,19 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     
     vec3 normal = normalize(Normal);
     vec3 lightDir = normalize(lightPositions[0] - WorldPos);
-    float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.0002);   //edit shadows
+    float bias = max(shadowUp * (1.0 - dot(normal, lightDir)), shadowBias);   //edit shadows
     
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    //float size = 10;
-    float size = 3;
-    for(float x = -size; x <= size; ++x)
+    
+    for(float x = -pcfSize; x <= pcfSize; ++x)
     {
-        for(float y = -size; y <= size; ++y)
+        for(float y = -pcfSize; y <= pcfSize; ++y)
         {
             float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
             shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
         }    
     }
-    shadow /= (size*2+1) * (size*2+1);
+    shadow /= (pcfSize*2+1) * (pcfSize*2+1);
     lightDebug = vec3(shadow);
     return shadow;
 }
@@ -210,6 +214,9 @@ void runLight()
     F0 = mix(F0, albedo, metallic);
 
     vec3 Lo = vec3(0.0);
+    float shadowCol, shadow = ShadowCalculation(WorldPosLightSpace);
+    shadowCol = 1.0 - shadow;
+
     for(int i = 0; i < 1; ++i) 
     {
         vec3 L = normalize(lightPositions[i] - WorldPos);
@@ -232,7 +239,7 @@ void runLight()
             
         float NdotL = max(dot(N, L), 0.0);        
 
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        Lo += (kD * albedo / PI + specular) * (radiance * shadowCol) * NdotL;
     }   
     
     // ambient lighting from IBL
@@ -241,9 +248,6 @@ void runLight()
     vec3 kS = F;
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - metallic;	
- 
-    //float shadowCol, shadow = ShadowCalculation(WorldPosLightSpace);
-    //shadowCol = 1.0 - shadow;
 
     vec3 bbMax = vec3(3.0,4.0,3.0); ////AABB hardcoded !
     vec3 bbMin = vec3(-3.0,-1.0,-3.0);
@@ -267,9 +271,11 @@ void runLight()
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
     vec3 ambient = (kD * diffuse + specular) * ao;
-    
-    //vec3 color = (shadowCol+multi)*ambient + (shadowCol * Lo);
-    vec3 color = ambient + Lo;
+   
+
+    vec3 color = (shadowCol + multiplayer)*ambient + ((shadowCol + multiplayer) * Lo);
+
+    //vec3 color = ambient + Lo;
 
     // HDR tonemapping 
     color = (color / (color + vec3(1.0)));

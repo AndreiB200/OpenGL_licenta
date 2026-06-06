@@ -1,4 +1,5 @@
-#pragma once
+#define _IBL_
+#ifdef _IBL_
 
 #include <iostream>
 #include <glad/glad.h>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <fstream>
 #include "Shader.h"
+#include "Timer.h"
 //#include "stb_image.h"
 using namespace std;
 
@@ -130,6 +132,8 @@ public:
 		glBindVertexArray(0);
 	}
 
+	Timer myTimer;
+
 	IBL() 
 	{ 
 		//unsigned int captureFBO, captureRBO;
@@ -140,7 +144,7 @@ public:
 
 	void createCaptureViews()
 	{
-		captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+		captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 1000.0f);
 		cameraCapturePos = glm::vec3(0.0f, 0.0f, 0.0f);
 		
 		captureUp[0] = glm::vec3(1.0f, 0.0f, 0.0f),  captureUp[1] = glm::vec3(-1.0f, 0.0f, 0.0f), captureUp[2] = glm::vec3(0.0f, 1.0f, 0.0f),
@@ -163,7 +167,6 @@ public:
 
 	void initCubeFromHDR(const char* path)
 	{
-		//createCaptureViews();
 		glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
 		glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
@@ -248,6 +251,8 @@ public:
 
 	void irradianceMapCreate(unsigned int& envCubeMap)
 	{
+		myTimer.startClock();
+
 		const unsigned int size = 32;
 		glGenTextures(1, &irradianceMap);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
@@ -281,11 +286,14 @@ public:
 			renderCube();
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		std::cout << myTimer.stopClock(time_type::sec) << " irradiance Map" << std::endl;
 		specularMap(envCubeMap);
 	}
 
 	void specularMap(unsigned int& envCubeMap)
 	{
+		myTimer.startClock();
 		glGenTextures(1, &prefilterMap);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
 		const unsigned int size = 256;
@@ -327,10 +335,12 @@ public:
 			}
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		//generateLUT();
+		std::cout << myTimer.stopClock(time_type::sec) << " specular Map" << std::endl;
+		generateLUT();
 	}
 	void generateLUT()
 	{
+		myTimer.startClock();
 		glGenTextures(1, &brdfLUTTexture);
 
 		glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
@@ -352,14 +362,15 @@ public:
 		renderQuad();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		std::cout << myTimer.stopClock(time_type::sec) << " specular Map" << std::endl;
 	}
 
-	void moveCamera(float x, float y, float z)
+	void moveCamera(glm::vec3 _cameraMove)
 	{
-		cameraMove = glm::vec3(-x, -y, z);
+		cameraMove = _cameraMove;
 		for (unsigned int i = 0; i < 6; i++)
 		{
-			captureViews[i] = glm::translate(captureViews[i], glm::vec3(-x, -y, z));
+			captureViews[i] = glm::translate(captureViews[i], _cameraMove);
 		}
 	}
 	void defaultCamPos()
@@ -375,7 +386,8 @@ public:
 	{
 		if (face == 6)
 		{
-			start = 0; face = 0; std::cout << "Baking process started !" << std::endl;
+			start = 0; face = 0; 
+			std::cout << "Baking process started !" << std::endl;
 			shader.setBool("start", start);
 			defaultCamPos();
 			irradianceMapCreate(bakedMap);
@@ -396,6 +408,7 @@ public:
 			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		}
+		
 		glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
 		glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
@@ -405,12 +418,23 @@ public:
 
 		shader.setMat4("projection", captureProjection);
 		shader.setMat4("view", captureViews[face]);
+		shader.setVec3("camPos", cameraCapturePos);
 		shader.setBool("start", start);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, bakedMap, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		face++;
 	}
 
+	void bind(unsigned int startSlot)
+	{
+		glActiveTexture(GL_TEXTURE0 + startSlot);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+		glActiveTexture(GL_TEXTURE0 + startSlot + 1);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+		glActiveTexture(GL_TEXTURE0 + startSlot + 2);
+		glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+	}
+	
 	void drawBackground(glm::mat4 &view, glm::mat4& projection)
 	{
 		backgroundShader.use();
@@ -422,3 +446,6 @@ public:
 		renderCube();
 	}
 };
+
+
+#endif _IBL_

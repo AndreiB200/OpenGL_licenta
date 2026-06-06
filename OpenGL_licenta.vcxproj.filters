@@ -194,6 +194,9 @@
     <ClInclude Include="DebuggerClass.h">
       <Filter>Header Files\Debuggers class</Filter>
     </ClInclude>
+    <ClInclude Include="DebugList.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="voxelGen.vert">

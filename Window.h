@@ -41,6 +41,8 @@ void framebuffer_size(GLFWwindow* window, int width, int height)
 class Window
 {
 public: 
+	Window(){}
+
 	GLFWwindow* window = nullptr;
 
 	Window(int WIDTH, int HEIGHT, Camera* camera, const char *title)

@@ -317,19 +317,6 @@ int main()
     Shader pbrShader("pbr.vert", "pbr.frag");
     
     pbrShader.use();
-    pbrShader.setInt("irradianceMap", 0);
-    pbrShader.setInt("prefilterMap", 1);
-    pbrShader.setInt("brdfLUT", 2);
-
-    pbrShader.setVec3("albedo", glm::vec3(0.5f, 0.0f, 0.0f));
-    pbrShader.setFloat("ao", 1.0f);
-
-    pbrShader.setInt("albedoMap", 3);
-    pbrShader.setInt("metallicMap", 4);
-    pbrShader.setInt("normalMap", 5);
-    pbrShader.setInt("roughnessMap", 6);
-    pbrShader.setInt("alphaMap", 7);
-
 
     IBL ibl = IBL();
     ibl.initCubeFromHDR("HDRI/mappo.hdr");
@@ -373,69 +360,49 @@ int main()
     // lights
     // ------
     glm::vec3 lightPositions[] = {
-        glm::vec3(-10.0f,  10.0f, 10.0f)
+        glm::vec3(-2.0f,  3.0f, 2.0f)
     };
     glm::vec3 lightColors[] = {
         glm::vec3(1.0f, 1.0f, 1.0f)
     };
-    int nrRows = 7;
-    int nrColumns = 7;
-    float spacing = 2.5;
+    
 
-    // pbr: setup framebuffer
-    // ----------------------
+    ShadowMap shadow = ShadowMap(lightPositions[0]);
+
+
 
 
     // initialize static shader uniforms before rendering
     // --------------------------------------------------
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-    pbrShader.use();
-    pbrShader.setMat4("projection", projection);
-
-    
     glViewport(0, 0, WIDTH, HEIGHT);
 
 
-    Imgui_layer::getInstance().Init(myWindow.window);
+
+
+    //Imgui_layer::getInstance().Init(myWindow.window);
     DebuggerClass imgui_helper;
+    imgui_helper.initImgui(myWindow);
 
-    Imgui_layer::getInstance().addWidget(new Value("deltaTime:", &deltaTime));
+    imgui_helper.attachdeltaTime(deltaTime);
+    imgui_helper.attachLight(lightPositions[0]);
+    imgui_helper.attachShadow(shadow);
+    imgui_helper.attachModels(models);
+    imgui_helper.attach_newModel(newModel);
 
-    Imgui_layer::getInstance().addWidget(new ImGUI_text("Material select"));
-    Imgui_layer::getInstance().addWidget(new CheckBox("Secvential", &imgui_helper.secvential));
-    Imgui_layer::getInstance().addWidget(new InputInt("Mesh ID", &newModel.selectMesh, 0, static_cast<int>(newModel.meshNumbers - 1)));
-    Imgui_layer::getInstance().addWidget(new InputInt("Texture ID", &newModel.selectTexture, 0, static_cast<int>(newModel.texture.size() - 1)));
+    imgui_helper.setSlides();
 
-    Imgui_layer::getInstance().addWidget(new ImGUI_text("Modify material"));
-    Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &imgui_helper.textureSelect, 0, 4));
-    Imgui_layer::getInstance().addWidget(new Slider3("Color",        imgui_helper.color, 0.0f, 1.0f));
-    Imgui_layer::getInstance().addWidget(new Slider("Metal",        &imgui_helper.metal, 0.0f, 1.0f));
-    Imgui_layer::getInstance().addWidget(new Slider("Roughness",    &imgui_helper.roughness, 0.0f, 1.0f));
-    Imgui_layer::getInstance().addWidget(new Slider3("Normal",       imgui_helper.normal, 0.0f, 1.0f));
+    //OpenGL_Settings::getInstance().enableCullFace(true);
+    glm::mat4 proj = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+    camera.setPerspective(proj);
 
-    for (int i = 0; i < models.size(); i++)
-    {
-        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
-
-        std::string modelNumber = "Model##" + std::to_string(i);
-        Imgui_layer::getInstance().addWidget(new ImGUI_text(modelNumber));
-
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("POSITION"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->position, 0.01f));
-
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("ROTATE"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->rotation, 0.01f));
-
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("SCALE"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&models[i]->size, 0.01f));
-    }
+    bool start = false;
+    unsigned int bakedMap = 0;
 
 
-    OpenGL_Settings::getInstance().enableCullFace(false);
+    pbrShader.setVec3("albedo", glm::vec3(0.5f, 0.0f, 0.0f));
+    pbrShader.setFloat("ao", 1.0f);
     while (!glfwWindowShouldClose(myWindow.window))
     {
-        // per-frame time logic
-        // --------------------
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -446,34 +413,73 @@ int main()
 
         // render
         // ------
+
+        shadow.bindShadowMap(models);
+
+        glViewport(0, 0, WIDTH, HEIGHT);
         glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // render scene, supplying the convoluted irradiance map to the final shader.
         // ------------------------------------------------------------------------------------------
-        pbrShader.use();
         glm::mat4 view = camera.GetViewMatrix();
-        pbrShader.setMat4("view", view);
-        pbrShader.setVec3("camPos", camera.Position);
+        glm::mat4 projection = camera.GetProjection();
+
+        // activate PBR Shader
+        // ------------------------------------------------------------------------------------------
+        pbrShader.use();
+
+        // set SHADOW Map 0
+        pbrShader.setInt("shadowMap", 0);
+        // set IBL Maps 1-->3
+        pbrShader.setInt("irradianceMap", 1);
+        pbrShader.setInt("prefilterMap", 2);
+        pbrShader.setInt("brdfLUT", 3);
+        // set Texture2D Maps for the models in order 4-->8 (albedo, metal, normal, roughness, ~alpha)
+        pbrShader.setInt("albedoMap", 4);
+        pbrShader.setInt("metallicMap", 5);
+        pbrShader.setInt("normalMap", 6);
+        pbrShader.setInt("roughnessMap", 7);
+        pbrShader.setInt("alphaMap", 8);
+        
+
+        if (glfwGetKey(myWindow.window, GLFW_KEY_2) == GLFW_PRESS) {
+            view = shadow.lightView;
+        }
+
+        if ((glfwGetKey(myWindow.window, GLFW_KEY_B) == GLFW_PRESS) && (start == false)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(260));
+            start = true;
+        }
+
+        if (start)
+        {
+            ibl.startBaking(ibl.envCubeMap, pbrShader, start);
+        }
+        if(!start)
+        {
+            pbrShader.setMat4("projection", projection);
+            pbrShader.setMat4("view", view);
+            pbrShader.setVec3("camPos", camera.Position);
+        }
+        
+        pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);
+        
+        imgui_helper.setShader(pbrShader);
 
         // bind pre-computed IBL data
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, ibl.irradianceMap);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, ibl.prefilterMap);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, ibl.brdfLUTTexture);
+        glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
+        ibl.bind(1);
 
-        imgui_helper.setShader(pbrShader);
 
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
-            glm::vec3 newPos = lightPositions[i] + glm::vec3(sin(glfwGetTime() * 5.0) * 5.0, 0.0, 0.0);
-            newPos = lightPositions[i];
+            glm::vec3 newPos = lightPositions[i];
             pbrShader.setVec3("lightPositions[" + std::to_string(i) + "]", newPos);
             pbrShader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
+            lightColors[i] = glm::vec3(imgui_helper.lightMultiplayer);
 
-            //newModel.draw(pbrShader);
             if (imgui_helper.secvential)
             {
                 for (int i = 0; i < models.size(); i++)
@@ -486,9 +492,16 @@ int main()
             }
         }
 
-        //ibl.drawBackground(view, projection);
+        if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) {
+            shadow.lightPos = lightPositions[0];
+            shadow.shadowDebug();
+        }
 
-        Imgui_layer::getInstance().Update();
+
+        ibl.drawBackground(view, projection);
+
+        if(!start)
+            Imgui_layer::getInstance().Update();
 
         glfwSwapBuffers(myWindow.window);
         glfwPollEvents();
