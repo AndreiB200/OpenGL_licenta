@@ -362,7 +362,7 @@ public:
 		renderQuad();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		std::cout << myTimer.stopClock(time_type::sec) << " specular Map" << std::endl;
+		std::cout << myTimer.stopClock(time_type::sec) << " LUT Map" << std::endl;
 	}
 
 	void moveCamera(glm::vec3 _cameraMove)

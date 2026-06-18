@@ -71,12 +71,12 @@ public:
 		stbi_write_png(filepath, width, height, nrChannels, buffer.data(), stride);
 	}
 
-	void renderFrame(Shader& screenShader, unsigned int& depthMap) {
+	/*void renderFrame(Shader& screenShader, unsigned int& depthMap) {
 		screenShader.use();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, depthMap);
 		primitiveObj.renderQuad();
-	}
+	}*/
 
 private:
 	PrimitiveObj primitiveObj;

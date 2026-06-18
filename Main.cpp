@@ -37,6 +37,8 @@
 #include "PrimitiveObj.h"
 #include "DebuggerClass.h"
 
+#include "PhysicsEngine.h"
+
 //Scene
 unsigned int WIDTH = 1280;
 unsigned int HEIGHT = 720;
@@ -315,6 +317,7 @@ int main()
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
     Shader pbrShader("pbr.vert", "pbr.frag");
+    Shader debug("bbVisual.vert", "bbVisual.frag");
     
     pbrShader.use();
 
@@ -324,8 +327,9 @@ int main()
 
     Model newModel = Model("Models/model.fbx");
     //Model newModel = Model("Models/Porsche/porsche.fbx");
-    newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
-    newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
+    //newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
+    //newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
+    newModel.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
     newModel.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
 
 
@@ -340,7 +344,7 @@ int main()
 
 
     Model proxy = Model("Models/Porsche/porsche_proxy.fbx");
-    proxy.rotate(-90, X);
+    proxy.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
 
 
     Model plane = Model("Models/Porsche/plane.fbx");
@@ -391,6 +395,9 @@ int main()
 
     imgui_helper.setSlides();
 
+    PhysicsEngine::getInstance().init();
+
+
     //OpenGL_Settings::getInstance().enableCullFace(true);
     glm::mat4 proj = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
     camera.setPerspective(proj);
@@ -401,6 +408,8 @@ int main()
 
     pbrShader.setVec3("albedo", glm::vec3(0.5f, 0.0f, 0.0f));
     pbrShader.setFloat("ao", 1.0f);
+
+    PrimitiveObj primObj;
     while (!glfwWindowShouldClose(myWindow.window))
     {
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -443,19 +452,19 @@ int main()
         pbrShader.setInt("alphaMap", 8);
         
 
-        if (glfwGetKey(myWindow.window, GLFW_KEY_2) == GLFW_PRESS) {
-            view = shadow.lightView;
-        }
+        //if (glfwGetKey(myWindow.window, GLFW_KEY_2) == GLFW_PRESS) {
+        //    view = shadow.lightView;
+        //}
 
-        if ((glfwGetKey(myWindow.window, GLFW_KEY_B) == GLFW_PRESS) && (start == false)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(260));
-            start = true;
-        }
+        //if ((glfwGetKey(myWindow.window, GLFW_KEY_B) == GLFW_PRESS) && (start == false)) {
+        //    std::this_thread::sleep_for(std::chrono::milliseconds(260));
+        //    start = true;
+        //}
 
-        if (start)
-        {
-            ibl.startBaking(ibl.envCubeMap, pbrShader, start);
-        }
+        //if (start)
+        //{
+        //    ibl.startBaking(ibl.envCubeMap, pbrShader, start);
+        //}
         if(!start)
         {
             pbrShader.setMat4("projection", projection);
@@ -471,7 +480,6 @@ int main()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
         ibl.bind(1);
-
 
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
@@ -497,11 +505,36 @@ int main()
             shadow.shadowDebug();
         }
 
+        if (glfwGetKey(myWindow.window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            glm::vec3 coltLocal(0.5f, 0.5f, 0.5f);
+
+            // Direcția locală în care împinge racheta (în sus, relativ la cub)
+            glm::vec3 directieRacheta(0.0f, 1.0f, 0.0f);
+
+            // Magnitudinea forței (ajustează valoarea în funcție de greutatea corpului, pentru 1kg, 15.0f o va ridica rapid)
+            float fortaRacheta = 15.0f;
+            PhysicsEngine::getInstance().ApplyRocketForce(coltLocal, directieRacheta, fortaRacheta);
+        }
+
+        glm::vec3 cube_pos;
+        glm::quat cube_quaternion;
+        PhysicsEngine::getInstance().getModelMatrixCube(cube_pos, cube_quaternion);
+        primObj.move(cube_pos);
+        primObj.rotate_Q(cube_quaternion);
+        primObj.renderCube_shader(pbrShader);
+
+        glLineWidth(2.0f);
+        PhysicsEngine::getInstance().drawDebug(debug.ID, view, projection);
+
+
+
 
         ibl.drawBackground(view, projection);
 
         if(!start)
             Imgui_layer::getInstance().Update();
+
+        PhysicsEngine::getInstance().run();
 
         glfwSwapBuffers(myWindow.window);
         glfwPollEvents();

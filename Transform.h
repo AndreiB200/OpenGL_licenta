@@ -15,11 +15,12 @@ public:
 
     glm::vec3 position = glm::vec3(0.0f);
 
-    float modelSize = 1.0f;
-    glm::vec3 size = glm::vec3(1.0f);
-
     float axisX, axisY, axisZ, degrees;
     glm::vec3 rotation = glm::vec3(0.0f);
+    glm::quat quaternion;
+
+    float modelSize = 1.0f;
+    glm::vec3 size = glm::vec3(1.0f);
 
     void move(float x, float y, float z)
     {
@@ -71,6 +72,12 @@ public:
         glm::vec3 convert = glm::vec3(glm::radians(_rotation.x), glm::radians(_rotation.y), glm::radians(_rotation.z));
         glm::quat quaternion = glm::quat(convert);
 
+        model = model * glm::toMat4(quaternion);
+    }
+
+    void rotate_Q(glm::quat _quaternion)
+    {
+        quaternion = _quaternion;
         model = model * glm::toMat4(quaternion);
     }
 

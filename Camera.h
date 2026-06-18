@@ -110,6 +110,11 @@ public:
         return glm::lookAt(Position, Position + Front, Up);
     }
 
+    glm::mat4 GetProjection()
+    {
+        return projection;
+    }
+
     void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true)
     {
         if (isEditing) {

@@ -2,11 +2,25 @@
 #define PRIMIT_OBJ_H
 
 #include <glad/glad.h>
+#include "Shader.h"
 
-class PrimitiveObj
+
+class PrimitiveObj : virtual public Transform
 {
 public:
 	PrimitiveObj(){}
+
+	void renderCube_shader(Shader& shader)
+	{
+		resetMatrix();
+		move(position);
+		rotate_Q(quaternion);
+		scale(size);
+		shader.setMat4("model", model);
+		glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
+		shader.setMat3("normalMatrix", normal);
+		renderCube();
+	}
 	
 	void renderCube()
 	{
@@ -73,6 +87,7 @@ public:
 			glBindVertexArray(0);
 		}
 		// render Cube
+
 		glBindVertexArray(cubeVAO);
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 		glBindVertexArray(0);

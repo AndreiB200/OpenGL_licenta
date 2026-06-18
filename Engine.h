@@ -92,7 +92,9 @@ public:
 		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		glm::mat4 projection = scene.getCamera().GetProjection();
 		glm::mat4 view = scene.getCamera().GetViewMatrix();
+
 		shader.use();
 
 		// Shadow Matrix
@@ -103,6 +105,16 @@ public:
 
 		//IBL
 		scene.getIBL().bind(1);
+
+		shader.setVec3("lightPositions[0]", scene.getLights()[0].lightPos);
+		shader.setVec3("lightColors[0]", scene.getLights()[0].lightColor);
+		scene.getLights()[0].lightColor = glm::vec3(imgui_helper.lightMultiplayer);
+
+		auto models = scene.getModelList();
+		for (int i = 0; i < models.size(); i++)
+			models[i]->draw(shader);
+
+		scene.getIBL().drawBackground(view, projection);
 	}
 
 private:

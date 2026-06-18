@@ -26,6 +26,8 @@
 #include "Transform.h"
 #include "Thread_Pool.h"
 #include "Texture.h"
+#include "PhysicsEngine.h"
+
 
 using namespace std;
 
@@ -35,7 +37,7 @@ struct BoundingBox
     glm::vec3 max = glm::vec3(std::numeric_limits<float>::max());
 };
 
-class Model: public Transform
+class Model: virtual public Transform
 {
 public:
     bool model_loaded = false;
@@ -57,6 +59,7 @@ public:
     bool threaded = false;
 
     unsigned int textureAlpha = 0;
+
     BoundingBox boundingBox;
 
     void applyMatrix(Shader& shader)
