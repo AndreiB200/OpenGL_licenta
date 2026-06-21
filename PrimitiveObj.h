@@ -21,6 +21,18 @@ public:
 		shader.setMat3("normalMatrix", normal);
 		renderCube();
 	}
+
+	void renderCube_shader(Shader& shader, glm::vec3 position, glm::quat quaternion, float size)
+	{
+		resetMatrix();
+		move(position);
+		rotate_Q(quaternion);
+		scale(size);
+		shader.setMat4("model", model);
+		glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
+		shader.setMat3("normalMatrix", normal);
+		renderCube();
+	}
 	
 	void renderCube()
 	{

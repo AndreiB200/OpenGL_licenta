@@ -33,8 +33,8 @@ using namespace std;
 
 struct BoundingBox
 {
-    glm::vec3 min = glm::vec3(std::numeric_limits<float>::min());
-    glm::vec3 max = glm::vec3(std::numeric_limits<float>::max());
+    glm::vec3 min = glm::vec3(0.0f);
+    glm::vec3 max = glm::vec3(0.0f);
 };
 
 class Model: virtual public Transform
@@ -54,6 +54,8 @@ public:
     int meshNumbers = 0;
     vector<vector<Vertex>> allVertices;
     vector<vector<unsigned int>> allIndices;
+    std::vector<JPH::Vec3> joltVertices;
+
     
     string path;
     bool threaded = false;
@@ -61,15 +63,32 @@ public:
     unsigned int textureAlpha = 0;
 
     BoundingBox boundingBox;
+    JPH::BodyID physics_id;
+    bool convex = false;
+    bool takePhysicsMatrix = false;
+
+    void applyPhysicsMatrix(bool value) { takePhysicsMatrix = value; }
 
     void applyMatrix(Shader& shader)
     {
         if (dynamic) 
         {
-            resetMatrix();
-            move(position);
-            rotate_Q(rotation);
-            scale(size);
+            if (!takePhysicsMatrix)
+            {
+                resetMatrix();
+                move(position);
+                rotate_Q(quaternion);
+                scale(size);
+            }
+            else
+            {
+                resetMatrix();
+                PhysicsEngine::getInstance().getModelMatrix(physics_id, position, quaternion);
+                move(position);
+                rotate_Q(quaternion);
+                scale(size);
+            }
+
             shader.setMat4("model", model);
             glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
             shader.setMat3("normalMatrix", normal);
@@ -143,10 +162,26 @@ public:
         texture = textures.texture2DPbr(directory, path);
     }
 
-    Model(string const& paath, bool gamma = false) : gammaCorrection(gamma)
+    void applyPhysicsAABB(bool dynamic = false)
     {
+        if(dynamic)
+            physics_id = PhysicsEngine::getInstance().createBodyDynamic(boundingBox.max, position, quaternion);
+        else
+            physics_id = PhysicsEngine::getInstance().createBodyStatic(boundingBox.max, position, quaternion);
+    }
+
+    void applyPhysicsConvexHull()
+    {
+        physics_id = PhysicsEngine::getInstance().createBodyConvexHull(joltVertices, size, position, quaternion);
+    }
+
+    Model(string const& paath, bool _convex = false, bool gamma = false) : gammaCorrection(gamma)
+    {
+        std::cout << paath << std::endl;
         path = paath;
         std::function<void()> f = std::bind(&Model::loadModel, this);
+
+        convex = _convex;
         
         if (threaded == true)
         {
@@ -158,7 +193,7 @@ public:
             f();
             loadMeshes();
         }
-
+        std::cout << std::endl;
     }
 
     void applyData()
@@ -174,6 +209,22 @@ private:
             meshes.push_back(Mesh(allVertices[i], allIndices[i]));
             totalPoly = totalPoly + allVertices[i].size();
         }
+        if (convex)
+        {
+            size_t totalVertices = 0;
+            for (const auto& meshVertices : allVertices)
+            {
+                totalVertices += meshVertices.size();
+            }
+            joltVertices.reserve(totalVertices);
+            for (const auto& meshVertices : allVertices)      
+            {
+                for (const auto& vertex : meshVertices)
+                {
+                    joltVertices.push_back(JPH::Vec3(vertex.Position.x, vertex.Position.y, vertex.Position.z));
+                }
+            }
+        }
         std::cout << "Acest model are " << totalPoly << " poligoane cu ID: " << meshes[0].VAO << std::endl;
         allVertices.clear();
         allVertices.shrink_to_fit();
@@ -181,6 +232,8 @@ private:
         allVertices.shrink_to_fit();
         std::cout << "Modelul este incarcat in GPU !" << std::endl;
         meshNumbers = meshes.size();
+        std::cout << "Box Shape min: " << boundingBox.min.x << ", " << boundingBox.min.y << ", " << boundingBox.min.z << std::endl;
+        std::cout << "Box Shape max: " << boundingBox.max.x << ", " << boundingBox.max.y << ", " << boundingBox.max.z << std::endl;
     }
     void loadModel()
     {

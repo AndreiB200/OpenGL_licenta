@@ -70,9 +70,10 @@ public:
     {
         rotation = _rotation;
         glm::vec3 convert = glm::vec3(glm::radians(_rotation.x), glm::radians(_rotation.y), glm::radians(_rotation.z));
-        glm::quat quaternion = glm::quat(convert);
+        glm::quat _quaternion = glm::quat(convert);
+        quaternion = _quaternion;
 
-        model = model * glm::toMat4(quaternion);
+        model = model * glm::toMat4(_quaternion);
     }
 
     void rotate_Q(glm::quat _quaternion)

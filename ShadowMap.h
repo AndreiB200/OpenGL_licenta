@@ -11,7 +11,7 @@ class ShadowMap
 {
 public:
 	unsigned int depthMapFBO, depthMap, shadow_WIDTH, shadow_HEIGHT;
-	unsigned int shadowRes = 4096;
+	unsigned int shadowRes = 2048;
 
 	glm::mat4 lightProjection, lightView, lightSpaceMatrix;
 	glm::vec3 lightPos;

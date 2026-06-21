@@ -17,12 +17,12 @@ public:
 	float normal[3] = {0.0f,0.0f,0.0f};
 	float color[3] = {0.7f, 0.7f, 0.7f};
 
-	float shadowUp = 0.0f, shadowBias = 0.005f, multipalyer = 0.0f, ambient_occlusion = 1.0f, lightMultiplayer = 1.0f;
+	float shadowUp = 0.000f, shadowBias = 0.0001f, multipalyer = 0.1f, ambient_occlusion = 1.0f, lightMultiplayer = 1.0f;
 	int pcfSize = 3;
 
 	int index = 0;
 
-	int textureSelect = 1; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
+	int textureSelect = 0; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
 
     // Variables that need to be attached (prototype, needs improvment)
     float *deltaTime;
@@ -62,20 +62,64 @@ public:
         newModel = &model;
     }
 
+    // Drone checks
+    std::string droneInfo = "";
+    float maxPower = 2.0f;
+    glm::quat quatDebug;
+    glm::vec3 quatDummyTest;
+    bool startMotors = true;
+    float getMaxPower()
+    {
+        return maxPower;
+    }
+    // PID
+    bool droneCamera = false;
+
+
 	void setSlides()
 	{
         Imgui_layer::getInstance().addWidget(new Value("deltaTime:", deltaTime));
+        Imgui_layer::getInstance().addWidget(new Value("W:", &quatDebug.w)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" X:", &quatDebug.x)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Y:", &quatDebug.y)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Z:", &quatDebug.z));
+
+        // PID values
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("pidPitch"));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidPitch.kp, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidPitch.ki, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidPitch.kd, 0.1f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("pidRoll"));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidRoll.kp, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidRoll.ki, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidRoll.kd, 0.1f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("pidYaw"));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidYaw.kp, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidYaw.ki, 0.1f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidYaw.kd, 0.1f));
+
 
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
         Imgui_layer::getInstance().addWidget(new DragFloat("FarPlane", &shadow->far_plane, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragFloat("Frustrum", &shadow->frustrum, 0.1f));
         Imgui_layer::getInstance().addWidget(new ImGUI_text("LightPosition"));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(lightPositions, 0.1f));
+
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
+        Imgui_layer::getInstance().addWidget(new DragFloat("Motor thrust power", &maxPower, 0.1f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Start motors", &startMotors));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Quaternion TEST"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&quatDummyTest, 0.1f));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Drone camera", &droneCamera));
 
 
-        Imgui_layer::getInstance().addWidget(new DragFloat("shadowUp", &shadowUp, 0.005f));
-        Imgui_layer::getInstance().addWidget(new DragFloat("shadowBias", &shadowBias, 0.001f));
+
+
+
+        Imgui_layer::getInstance().addWidget(new DragFloat("shadowUp", &shadowUp, 0.0001f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("shadowBias", &shadowBias, 0.000f));
         Imgui_layer::getInstance().addWidget(new InputInt("pcfSize", &pcfSize, 0, 20));
         Imgui_layer::getInstance().addWidget(new DragFloat("multiplyer", &multipalyer, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragFloat("ambient_occlusion", &ambient_occlusion, 0.1f));
