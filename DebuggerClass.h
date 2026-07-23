@@ -26,6 +26,7 @@ public:
 
     // Variables that need to be attached (prototype, needs improvment)
     float *deltaTime;
+    float *fps;
     ShadowMap *shadow;
     glm::vec3 *lightPositions;
 
@@ -37,9 +38,10 @@ public:
 		Imgui_layer::getInstance().Init(myWindow.window);
 	}
 
-    void attachdeltaTime(float &_deltaTime)
+    void attachDeltaTimeAndFps(float &_deltaTime, float &_fps)
     {
         deltaTime = &_deltaTime;
+        fps = &_fps;
     }
 
     void attachLight(glm::vec3 &_lightPositions)
@@ -64,40 +66,110 @@ public:
 
     // Drone checks
     std::string droneInfo = "";
-    float maxPower = 2.0f;
+    float maxPower = 0.1f;
     glm::quat quatDebug;
+    glm::vec3 currentPos;
     glm::vec3 quatDummyTest;
     bool startMotors = true;
+    glm::vec3 cameraLocation = glm::vec3(0.0f, -0.3f, 0.0f);
+    glm::vec3 lookingCamera = glm::vec3(0.0f, -0.5f, 2.0f);
     float getMaxPower()
     {
         return maxPower;
     }
     // PID
     bool droneCamera = false;
-
+    bool gamepadState = false;
+    float droneTargetHeight = 0.0f;
+    float minPower = 0.0f;
+    float rollValue = 0.0f, pitchValue = 0.0f, middlePointDebug = 0.0f, outputRoll = 0.0f, outputPitch = 0.0f;
+    float MIN_ALPHA = 0.1f, MAX_ALPHA = 1.0f, NOISE_THRESHOLD = 0.004f, JUMP_THRESHOLD = 0.003f;
+    float SENSITIVITY = 2.0f;
+    bool inteligenta_artificiala = false;
+    glm::vec3 targetPosition = glm::vec3(0.0f, 2.0f, 0.0f);
+    glm::vec3 posPropeller_FRONTLEFT = glm::vec3(1.88f, -0.35f, 1.62f);
+    glm::vec3 posPropeller_BACKLEFT  = glm::vec3(1.69f, -0.35f, -1.56f);
+    glm::vec3 posPropeller_FRONTRIGHT= glm::vec3(-1.90f, -0.35f, 1.61f);
+    glm::vec3 posPropeller_BACKRIGHT = glm::vec3(-1.72f, -0.35f, -1.57f);
 
 	void setSlides()
 	{
         Imgui_layer::getInstance().addWidget(new Value("deltaTime:", deltaTime));
+        Imgui_layer::getInstance().addWidget(new Value("FPS:", fps));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Gamepad connected", &gamepadState));
+
+        Imgui_layer::getInstance().addWidget(new Value("Height target:", &droneTargetHeight));
         Imgui_layer::getInstance().addWidget(new Value("W:", &quatDebug.w)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" X:", &quatDebug.x)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Y:", &quatDebug.y)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &quatDebug.z));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Position"));
+        Imgui_layer::getInstance().addWidget(new Value(" X:", &currentPos.x)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Y:", &currentPos.y)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Z:", &currentPos.z));
 
         // PID values
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
         Imgui_layer::getInstance().addWidget(new ImGUI_text("pidPitch"));
-        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidPitch.kp, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidPitch.ki, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidPitch.kd, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidPitch.kp, 0.05f)); 
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidPitch.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidPitch.kd, 0.05f));
         Imgui_layer::getInstance().addWidget(new ImGUI_text("pidRoll"));
-        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidRoll.kp, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidRoll.ki, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidRoll.kd, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidRoll.kp, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidRoll.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidRoll.kd, 0.05f));
         Imgui_layer::getInstance().addWidget(new ImGUI_text("pidYaw"));
-        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidYaw.kp, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidYaw.ki, 0.1f)); 
-        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidYaw.kd, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidYaw.kp, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidYaw.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidYaw.kd, 0.05f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("pidHeight"));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidHeight.kp, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidHeight.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidHeight.kd, 0.05f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("pid X and Z"));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidX.kp, 0.01f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidX.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidX.kd, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kp", &pidZ.kp, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("ki", &pidZ.ki, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("kd", &pidZ.kd, 0.05f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Target position"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&targetPosition, 0.02f));
+
+        //Drone
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
+        Imgui_layer::getInstance().addWidget(new CheckBox("inteligenta_artificiala", &inteligenta_artificiala));
+        Imgui_layer::getInstance().addWidget(new DragFloat("Motor thrust power", &maxPower, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("Motor minimum power", &minPower, 0.1f));
+        Imgui_layer::getInstance().addWidget(new Value("ROLL Value:", &rollValue));
+        Imgui_layer::getInstance().addWidget(new Value("PITCH value:", &pitchValue));
+        Imgui_layer::getInstance().addWidget(new Value("MIDDDLE point:", &middlePointDebug));
+        Imgui_layer::getInstance().addWidget(new Value("Output Roll:", &outputRoll));
+        Imgui_layer::getInstance().addWidget(new Value("Output Pitch:", &outputPitch));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Start motors", &startMotors));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Quaternion TEST"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&quatDummyTest, 0.1f));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Drone camera", &droneCamera));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Camera Location and Look"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&cameraLocation, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&lookingCamera, 0.1f));
+
+        Imgui_layer::getInstance().addWidget(new DragFloat("MIN_ALPHA", &MIN_ALPHA, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("MAX_ALPHA", &MAX_ALPHA, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("NOISE_THRESHOLD", &NOISE_THRESHOLD, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("JUMP_THRESHOLD", &JUMP_THRESHOLD, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SENSITIVITY TRUST", &SENSITIVITY, 0.1f));
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("FRONT LEFT"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_FRONTLEFT, 0.01f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("BACK LEFT"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_BACKLEFT, 0.01f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("FRONT RIGHT"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_FRONTRIGHT, 0.01f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("BACK RIGHT"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_BACKRIGHT, 0.01f));
+
 
 
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
@@ -106,18 +178,8 @@ public:
         Imgui_layer::getInstance().addWidget(new ImGUI_text("LightPosition"));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(lightPositions, 0.1f));
 
+
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
-        Imgui_layer::getInstance().addWidget(new DragFloat("Motor thrust power", &maxPower, 0.1f));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
-        Imgui_layer::getInstance().addWidget(new CheckBox("Start motors", &startMotors));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("Quaternion TEST"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&quatDummyTest, 0.1f));
-        Imgui_layer::getInstance().addWidget(new CheckBox("Drone camera", &droneCamera));
-
-
-
-
-
         Imgui_layer::getInstance().addWidget(new DragFloat("shadowUp", &shadowUp, 0.0001f));
         Imgui_layer::getInstance().addWidget(new DragFloat("shadowBias", &shadowBias, 0.000f));
         Imgui_layer::getInstance().addWidget(new InputInt("pcfSize", &pcfSize, 0, 20));

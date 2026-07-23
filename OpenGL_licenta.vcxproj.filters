@@ -164,9 +164,6 @@
     <ClInclude Include="Texture.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Physics.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
     <ClInclude Include="IBL.h">
       <Filter>Scene</Filter>
     </ClInclude>
@@ -199,6 +196,15 @@
     </ClInclude>
     <ClInclude Include="PhysicsEngine.h">
       <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkStreamer.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
+    <ClInclude Include="Drone.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Gamepad.h">
+      <Filter>Header Files\Debuggers class</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

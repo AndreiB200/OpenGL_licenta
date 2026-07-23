@@ -1,5 +1,6 @@
 #version 460 core
-out vec4 FragColor;
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 FragLinearDepth;
 
 in vec2 TexCoords;
 in vec3 WorldPos;
@@ -295,7 +296,18 @@ void runLight()
     //FragColor = vec4(lightDebug, 1.0);
 }
 
+void runDepth()
+{   
+    float near_plane = 0.001;
+    float far_plane = 1000.0;
+    float z = gl_FragCoord.z * 2.0 - 1.0; // Back to NDC 
+
+    float liniar = (2.0 * near_plane * far_plane) / (far_plane + near_plane - z * (far_plane - near_plane));
+    FragLinearDepth = vec4(vec3(liniar), 1.0);
+}
+
 void main()
 {	
     runLight();
+    runDepth();
 }

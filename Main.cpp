@@ -1,3 +1,6 @@
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include <iostream>
 #include <thread>
 #include <mutex>
@@ -27,7 +30,6 @@
 #include "Porsche_texture.h"
 #include "StructuresHelpers.h"
 #include "IBL.h"
-#include "Physics.h"
 #include "Texture.h"
 #include "Scene.h"
 #include "Window.h"
@@ -38,16 +40,21 @@
 #include "DebuggerClass.h"
 
 #include "PhysicsEngine.h"
+#include "Gamepad.h"
+#include "Drone.h"
+#include "NetworkStreamer.h"
+
 
 //Scene
-unsigned int WIDTH = 1366;
-unsigned int HEIGHT = 768;
+unsigned int WIDTH = 1280;
+unsigned int HEIGHT = 720;
 
 //Scene
 //Camera camera(glm::vec3(0.0f, 1.0f, 2.0f));
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
+float fps = 0.0f;
 Camera camera(glm::vec3(0.0f, 3.0f, 10.0f));
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
@@ -266,6 +273,42 @@ void renderCube()
     glBindVertexArray(0);
 }
 
+
+GLuint framebuffer_colordepth, colorTexture_drone, depthTexture_drone, rbo_depth;
+GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+void createColorAndDepth()
+{
+    glGenFramebuffers(1, &framebuffer_colordepth);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_colordepth);
+
+    glGenTextures(1, &colorTexture_drone);
+    glBindTexture(GL_TEXTURE_2D, colorTexture_drone);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture_drone, 0);
+
+    glGenTextures(1, &depthTexture_drone);
+    glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depthTexture_drone, 0);
+
+    // 3. Renderbuffer-ul de adâncime (Hardware Depth Test - necesar ca obiectele 3D să nu se deseneze unele peste altele)
+    glGenRenderbuffers(1, &rbo_depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo_depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, WIDTH, HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo_depth);
+
+    glDrawBuffers(2, drawBuffers);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "EROARE: Framebuffer-ul nu este complet/valid!" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); // Extrem de important! Revenim la ecranul principal.
+}
+
 unsigned int quadVAO = 0;
 unsigned int quadVBO;
 void renderQuad()
@@ -294,6 +337,30 @@ void renderQuad()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 }
+void renderColorAndDepth(Window &myWindow, Shader &quadShader)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); // check FBO
+    glViewport(0, 0, WIDTH, HEIGHT);
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+
+    // 2. Activăm shaderul pentru quad-ul pe tot ecranul
+    quadShader.use();
+    quadShader.setInt("screenTexture", 0);
+    quadShader.setInt("depthTexture", 1);
+    if (glfwGetKey(myWindow.window, GLFW_KEY_M) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 1);
+    else
+        quadShader.setInt("u_mode", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, colorTexture_drone);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
+
+    renderQuad();
+}
 
 
 int main()
@@ -320,9 +387,9 @@ int main()
     PhysicsEngine::getInstance().init();
 
 
-
     Shader pbrShader("pbr.vert", "pbr.frag");
     Shader debug("bbVisual.vert", "bbVisual.frag");
+    Shader quadShader("frame.vert", "frame.frag");
     
     pbrShader.use();
 
@@ -334,14 +401,17 @@ int main()
     floor.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
     floor.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
 
-
+    Model depthScene = Model("Models/Env/depth_test.fbx");
+    depthScene.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
+    depthScene.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
+    depthScene.move(0.0f, 15.0f, 0.0f);
 
     Model newModel = Model("Models/model.fbx", true);
     //Model newModel = Model("Models/Porsche/porsche.fbx");
     //newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
     //newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
     newModel.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
-    newModel.move(0.0f, 3.0f, 1.0f);
+    newModel.move(5.0f, 3.0f, 0.0f);
     newModel.applyPhysicsConvexHull();
     newModel.applyPhysicsMatrix(true);
 
@@ -375,7 +445,8 @@ int main()
     std::vector<Model*> models = { 
         &newModel, 
         //&proxy, 
-        &floor, 
+        &floor,
+        &depthScene,
         &metal, 
         &plane,
         &drone,
@@ -395,8 +466,10 @@ int main()
 
     ShadowMap shadow = ShadowMap(lightPositions[0]);
 
-
-
+    createColorAndDepth();
+    FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5555, 1280, 720);
+    std::vector<unsigned char> colorData(1280 * 720 * 4);
+    std::vector<unsigned char> depthData(1280 * 720 * 4);
 
     // initialize static shader uniforms before rendering
     // --------------------------------------------------
@@ -404,21 +477,22 @@ int main()
 
 
 
-    //Imgui_layer::getInstance().Init(myWindow.window);
     DebuggerClass imgui_helper;
     imgui_helper.initImgui(myWindow);
 
-    imgui_helper.attachdeltaTime(deltaTime);
+    imgui_helper.attachDeltaTimeAndFps(deltaTime, fps);
     imgui_helper.attachLight(lightPositions[0]);
     imgui_helper.attachShadow(shadow);
     imgui_helper.attachModels(models);
     imgui_helper.attach_newModel(newModel);
 
     imgui_helper.setSlides();
+    Gamepad gamepad = Gamepad();
+    gamepad.bindDebugger(&imgui_helper);
 
 
     //OpenGL_Settings::getInstance().enableCullFace(true);
-    glm::mat4 proj = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
     camera.setPerspective(proj);
 
     bool start = false;
@@ -429,15 +503,24 @@ int main()
     pbrShader.setFloat("ao", 1.0f);
 
     PrimitiveObj primObj;
-    glm::vec3 cameraLocalOffset = glm::vec3(0.0f, 3.0f, -5.0f);
+    glm::vec3 cameraLocalOffset = glm::vec3(0.0f, 1.5f, 5.0f);
+    glm::vec3 lookAtDrone = glm::vec3(0.0f, 0.0f, -1.0f);
     Camera droneAttachedCamera(drone.position + cameraLocalOffset);
+    glm::mat4 projDrone = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
+    droneAttachedCamera.setPerspective(projDrone);
+
+    Drone droneSim = Drone(&myWindow, &drone, &propeler, &primObj, &imgui_helper);
+
+    PhysicsEngine::getInstance().showBodyInfo(drone.physics_id);
 
     while (!glfwWindowShouldClose(myWindow.window))
     {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+        fps = 1.0f / deltaTime;
 
+        gamepad.update();
 
         // input
         // -----
@@ -445,12 +528,13 @@ int main()
 
         // render
         // ------
-
         shadow.bindShadowMap(models);
 
         glViewport(0, 0, WIDTH, HEIGHT);
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_colordepth); // check FBO
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
 
         // render scene, supplying the convoluted irradiance map to the final shader.
         // ------------------------------------------------------------------------------------------
@@ -482,13 +566,18 @@ int main()
         }
         if (imgui_helper.droneCamera)
         {
+            cameraLocalOffset = imgui_helper.cameraLocation;
+            lookAtDrone = imgui_helper.lookingCamera;
+
             glm::vec3 dronePosition = drone.position;
             glm::quat droneQuaternion = drone.quaternion;
 
             glm::vec3 rotateOffset = droneQuaternion * cameraLocalOffset;
             glm::vec3 cameraWorldPosition = dronePosition + rotateOffset;
             glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
-            glm::mat4 viewMatrix = glm::lookAt(cameraWorldPosition, dronePosition, cameraUp);
+            glm::mat4 viewMatrix = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * lookAtDrone), cameraUp);
+            glm::mat4 projDrone = droneAttachedCamera.GetProjection();
+            pbrShader.setMat4("projection", projDrone);
             pbrShader.setMat4("view", viewMatrix);
             pbrShader.setVec3("camPos", cameraWorldPosition);
         }
@@ -521,118 +610,40 @@ int main()
             }
         }
 
+        droneSim.gamepadControl(gamepad);
+        if (imgui_helper.startMotors) {
+            for (int i = 0; i < 8; i++)
+            {
+                droneSim.flyDrone(pbrShader);
+            }
+        }
+
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0, 1280, 720, GL_RGBA, GL_UNSIGNED_BYTE, colorData.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT1);
+        glReadPixels(0, 0, 1280, 720, GL_RGBA, GL_UNSIGNED_BYTE, depthData.data());
+        droneSim.depthProc(depthData);
+        streamer.PushFrame(colorData, depthData);
+
+
+        //ibl.drawBackground(view, projection);
+
+
+
+        glLineWidth(2.0f);
+        if (!imgui_helper.droneCamera)
+            PhysicsEngine::getInstance().drawDebug(view, projection);
+        else
+        {
+
+        }
+        
+        renderColorAndDepth(myWindow, quadShader);
+
         if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) {
             shadow.lightPos = lightPositions[0];
             shadow.shadowDebug();
         }
-
-        if (imgui_helper.startMotors) {
-            for (int i = 0; i < 4; i++)
-            {
-                if (glfwGetKey(myWindow.window, GLFW_KEY_R) == GLFW_PRESS)
-                {
-                    pidPitch.Reset();
-                    pidRoll.Reset();
-                    pidYaw.Reset();
-                }
-
-                if (glfwGetKey(myWindow.window, GLFW_KEY_T) == GLFW_PRESS)
-                {
-                    PhysicsEngine::getInstance().resetBody(drone.physics_id, JPH::Vec3(0.0f,2.0f,2.0f), JPH::Quat::sIdentity());
-                }
-
-                // TEST !!!!!
-                glm::vec3 convert = glm::vec3(glm::radians(imgui_helper.quatDummyTest.x), glm::radians(imgui_helper.quatDummyTest.y), glm::radians(imgui_helper.quatDummyTest.z));
-                glm::quat quaternionDum = glm::quat(convert); // Test or drone movement
-
-                glm::vec3 positionPropeler(1.65f, -0.45, 1.4f);
-
-                glm::vec3 coltLocal0( positionPropeler.x, positionPropeler.y,  positionPropeler.z);
-                glm::vec3 coltLocal1( positionPropeler.x, positionPropeler.y, -positionPropeler.z);
-                glm::vec3 coltLocal2(-positionPropeler.x, positionPropeler.y,  positionPropeler.z);
-                glm::vec3 coltLocal3(-positionPropeler.x, positionPropeler.y, -positionPropeler.z);
-
-                glm::vec3 directieRacheta(0.0f, 1.0f, 0.0f);
-
-                float fortaRacheta = imgui_helper.getMaxPower();
-
-                glm::vec3 currentAngVel;
-                PhysicsEngine::getInstance().GetAngularVelocity(drone.physics_id, currentAngVel);
-
-                glm::quat targetRot = quaternionDum;
-                glm::quat errorQuat = glm::inverse(drone.quaternion) * targetRot;
-                if (errorQuat.w < 0.0f) errorQuat = -errorQuat;
-
-                glm::vec3 rotationError(errorQuat.x, errorQuat.y, errorQuat.z);
-
-                glm::vec3 noisyAngVel = currentAngVel;
-
-                float pitchCorectie = pidPitch.Update(rotationError.x, 1.0f / 240.0f);
-                float yawCorectie = pidYaw.Update(rotationError.y, 1.0f / 240.0f);
-                float rollCorectie = pidRoll.Update(rotationError.z, 1.0f / 240.0f);
-
-                float throttle = fortaRacheta;
-
-                float fortaM0 = throttle - pitchCorectie + rollCorectie - yawCorectie; 
-                float fortaM1 = throttle + pitchCorectie - rollCorectie - yawCorectie; 
-                float fortaM2 = throttle - pitchCorectie - rollCorectie + yawCorectie; 
-                float fortaM3 = throttle + pitchCorectie + rollCorectie + yawCorectie;
-
-                float MAX_FORCE = 10.0f;
-                fortaM0 = std::clamp(fortaM0, 0.0f, MAX_FORCE);
-                fortaM1 = std::clamp(fortaM1, 0.0f, MAX_FORCE);
-                fortaM2 = std::clamp(fortaM2, 0.0f, MAX_FORCE);
-                fortaM3 = std::clamp(fortaM3, 0.0f, MAX_FORCE);
-
-
-                if (glfwGetKey(myWindow.window, GLFW_KEY_SPACE) == GLFW_PRESS)
-                {
-                    PhysicsEngine::getInstance().ApplyRocketForce(drone.physics_id, coltLocal0, directieRacheta, fortaM0, -1.0f); // Front Left
-                    PhysicsEngine::getInstance().ApplyRocketForce(drone.physics_id, coltLocal2, directieRacheta, fortaM2, 1.0f);  // Front Right
-                    PhysicsEngine::getInstance().ApplyRocketForce(drone.physics_id, coltLocal1, directieRacheta, fortaM3, 1.0f);  // Back Left
-                    PhysicsEngine::getInstance().ApplyRocketForce(drone.physics_id, coltLocal3, directieRacheta, fortaM1, -1.0f); // Back Right
-                }
-                
-                propeler.move(coltLocal0); // M0
-                propeler.rotate_Q(drone.quaternion);
-                propeler.scale(0.5);
-                pbrShader.setVec3("u_albedo", glm::vec3(0.0f, fortaM0 / throttle, 0.0f));
-                propeler.draw(pbrShader);
-
-                propeler.move(coltLocal1); // M3
-                propeler.rotate_Q(drone.quaternion);
-                propeler.scale(0.5f);
-                pbrShader.setVec3("u_albedo", glm::vec3(0.0f, fortaM3 / throttle, 0.0f));
-                propeler.draw(pbrShader);
-
-                propeler.move(coltLocal2); // M2 
-                propeler.rotate_Q(drone.quaternion);
-                propeler.scale(0.5f);
-                pbrShader.setVec3("u_albedo", glm::vec3(0.0f, fortaM2 / throttle, 0.0f));
-                propeler.draw(pbrShader);
-
-                propeler.move(coltLocal3); // M1 
-                propeler.rotate_Q(drone.quaternion);
-                propeler.scale(0.5f);
-                pbrShader.setVec3("u_albedo", glm::vec3(0.0f, fortaM1 / throttle, 0.0f));
-                propeler.draw(pbrShader);
-
-                primObj.move(glm::vec3(2.0f, 2.0f, -1.0f));
-                primObj.rotate_Q(quaternionDum);
-                primObj.renderCube_shader(pbrShader);
-
-                imgui_helper.quatDebug = drone.quaternion;
-
-                PhysicsEngine::getInstance().run();
-            }
-        }
-
-        glLineWidth(2.0f);
-        if(!imgui_helper.droneCamera)
-            PhysicsEngine::getInstance().drawDebug(debug.ID, view, projection);
-
-
-        ibl.drawBackground(view, projection);
 
         if(!start)
             Imgui_layer::getInstance().Update();
