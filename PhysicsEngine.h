@@ -443,8 +443,8 @@ PIDController pidPitch{ 3.1f, 0.2f, 0.62f };
 PIDController pidRoll{ 1.8f, 0.2f, 0.30f };
 PIDController pidYaw{ 2.0f, 0.1f, 1.2f };
 PIDController pidHeight{ 11.2f, 2.5f, 18.4f };
-PIDController pidX{ 0.8f, 0.0f, 0.2f };
-PIDController pidZ{ 0.8f, 0.0f, 0.2f };
+PIDController pidX{ 1.1f, 0.0f, 2.0f };
+PIDController pidZ{ 1.1f, 0.0f, 2.0f };
 
 
 class PhysicsEngine
@@ -575,7 +575,7 @@ public:
 		);
 
 		JPH::MassProperties massProperties;
-		massProperties.mMass = 1.0f; // 1 kg
+		massProperties.mMass = 0.6f; // 1 kg
 		massProperties.mInertia = JPH::Mat44::sScale(JPH::Vec3(0.005f, 0.005f, 0.009f));
 
 		bodySettings.mMassPropertiesOverride = massProperties;
@@ -732,6 +732,11 @@ public:
 
 		// 2. Randăm bufferul acumulat pe ecran
 		jolt_debug_renderer->Render(view, projection);
+	}
+
+	const float getPhysicsStep()
+	{
+		return physicsTimeStep;
 	}
 
 	void run()

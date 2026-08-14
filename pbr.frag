@@ -1,12 +1,17 @@
 #version 460 core
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out vec4 FragLinearDepth;
+layout (location = 2) out vec4 FragPositionDepth;
+layout (location = 3) out vec4 FragNormalRoughness;
 
 in vec2 TexCoords;
 in vec3 WorldPos;
 in vec3 Normal;
 
 in vec4 WorldPosLightSpace;
+
+in vec3 FragPosViewSpace;
+in vec3 NormalViewSpace;
 
 // material parameters
 uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
@@ -32,6 +37,7 @@ uniform bool start = false;
 
 //shadow map
 uniform sampler2D shadowMap;
+uniform float depth_near, depth_far;
 uniform float multiplayer = 0.0f;
 
 // IBL
@@ -58,6 +64,43 @@ uniform int pcfSize = 3;
 
 vec3 lightDebug;
 
+const vec2 poissonDisk[32] = vec2[](
+    vec2(-0.613392,  0.617481),
+    vec2( 0.170019, -0.040254),
+    vec2(-0.299417,  0.791925),
+    vec2( 0.645680,  0.493210),
+    vec2(-0.651784,  0.223851),
+    vec2( 0.421003,  0.027100),
+    vec2(-0.467140, -0.405100),
+    vec2(-0.816201, -0.452241),
+    vec2(-0.242929, -0.211463),
+    vec2( 0.054950, -0.936000),
+    vec2(-0.562140, -0.743300),
+    vec2( 0.180300, -0.611200),
+    vec2(-0.026400, -0.357000),
+    vec2( 0.500000, -0.300000),
+    vec2( 0.683000, -0.602000),
+    vec2( 0.852000, -0.211000),
+    vec2( 0.228000,  0.401000),
+    vec2(-0.070000,  0.345000),
+    vec2( 0.251000,  0.751000),
+    vec2(-0.380000,  0.120000),
+    vec2(-0.841000, -0.101000),
+    vec2(-0.211000, -0.810000),
+    vec2( 0.410000, -0.820000),
+    vec2( 0.881000,  0.151000),
+    vec2( 0.512000,  0.810000),
+    vec2(-0.611000,  0.880000),
+    vec2(-0.951000,  0.301000),
+    vec2(-0.412000,  0.512000),
+    vec2( 0.001000,  0.981000),
+    vec2( 0.301000,  0.181000),
+    vec2( 0.812000, -0.810000),
+    vec2(-0.710000, -0.810000)
+);
+
+uniform float lightWidth = 0.05;
+
 // ----------------------------------------------------------------------------
 vec3 bbReflection(vec3 R, vec3 bbMax, vec3 bbMin, vec3 bbPos)
 {
@@ -71,6 +114,30 @@ vec3 bbReflection(vec3 R, vec3 bbMax, vec3 bbMin, vec3 bbPos)
     return localCorrReflDirWS;
 }
 // ----------------------------------------------------------------------------
+float randomAngle(vec2 seed) {
+    return dot(sin(seed * vec2(12.9898, 78.233)), vec2(43758.5453)) * 6.28318530718;
+}
+
+float FindBlockerDistance(vec3 projCoords, float currentDepth, float bias)
+{
+    int blockers = 0;
+    float avgBlockerDepth = 0.0;
+    vec2 searchRadius = (1.0 / textureSize(shadowMap, 0)) * 5.0; // Zona fixa de cautare
+
+    for(int i = 0; i < 32; i++)
+    {
+        float shadowMapDepth = texture(shadowMap, projCoords.xy + poissonDisk[i] * searchRadius).r;
+        if(shadowMapDepth < currentDepth - bias)
+        {
+            blockers++;
+            avgBlockerDepth += shadowMapDepth;
+        }
+    }
+
+    if(blockers == 0) return -1.0; // Nu exista blocker-i
+    return avgBlockerDepth / float(blockers);
+}
+
 float ShadowCalculation(vec4 fragPosLightSpace)
 {   
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -82,19 +149,37 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     
     vec3 normal = normalize(Normal);
     vec3 lightDir = normalize(lightPositions[0] - WorldPos);
-    float bias = max(shadowUp * (1.0 - dot(normal, lightDir)), shadowBias);   //edit shadows
-    
+    float bias = max(shadowUp * (1.0 - dot(normal, lightDir)), shadowBias);
+
+    float avgBlockerDepth = FindBlockerDistance(projCoords, currentDepth, bias);
+
+    if(avgBlockerDepth < 0.0) return 0.0;
+
+    float penumbraSize = ((currentDepth - avgBlockerDepth) / avgBlockerDepth) * lightWidth;
+
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    
-    for(float x = -pcfSize; x <= pcfSize; ++x)
+    vec2 filterRadius = penumbraSize * texelSize;
+
+    float diskRadius = 3.0 * texelSize.x;
+
+    float angle = randomAngle(gl_FragCoord.xy);
+    float sinAngle = sin(angle);
+    float cosAngle = cos(angle);
+    mat2 rotationMatrix = mat2(cosAngle, -sinAngle, sinAngle, cosAngle);
+
+    for(int i = 0; i < 32; i++)
     {
-        for(float y = -pcfSize; y <= pcfSize; ++y)
-        {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
-        }    
+        vec2 rotatedOffset = rotationMatrix * poissonDisk[i];
+        vec2 sampleUV = projCoords.xy + rotatedOffset * filterRadius;
+        float closestDepth = texture(shadowMap, sampleUV).r;
+        
+        // Daca adancimea curenta - bias e mai mare, pixelul e in umbra
+        if (currentDepth - bias > closestDepth)
+            shadow += 1.0;
     }
-    shadow /= (pcfSize*2+1) * (pcfSize*2+1);
+
+    shadow /= 32.0;
+    shadow = clamp(shadow * shadow * (3.0 - 2.0 * shadow), 0.2, 0.8);
     lightDebug = vec3(shadow);
     return shadow;
 }
@@ -274,7 +359,7 @@ void runLight()
     vec3 ambient = (kD * diffuse + specular) * ao;
    
 
-    vec3 color = (shadowCol + multiplayer)*ambient + ((shadowCol + multiplayer) * Lo);
+    vec3 color = (shadowCol + multiplayer) * ambient + ((shadowCol + multiplayer) * Lo);
 
     //vec3 color = ambient + Lo;
 
@@ -293,16 +378,20 @@ void runLight()
         alphaVal = texture(alphaMap, TexCoords).r;
 
     FragColor = vec4(color, alphaVal);
+
+    FragPositionDepth = vec4(FragPosViewSpace, FragPosViewSpace.z);
+
+    N = normalize(NormalViewSpace);
+    FragNormalRoughness = vec4(N, roughness);
+
     //FragColor = vec4(lightDebug, 1.0);
 }
 
 void runDepth()
 {   
-    float near_plane = 0.001;
-    float far_plane = 1000.0;
     float z = gl_FragCoord.z * 2.0 - 1.0; // Back to NDC 
 
-    float liniar = (2.0 * near_plane * far_plane) / (far_plane + near_plane - z * (far_plane - near_plane));
+    float liniar = (2.0 * depth_near * depth_far) / (depth_far + depth_near - z * (depth_far - depth_near));
     FragLinearDepth = vec4(vec3(liniar), 1.0);
 }
 

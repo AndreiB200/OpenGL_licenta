@@ -41,8 +41,8 @@
 
 #include "PhysicsEngine.h"
 #include "Gamepad.h"
-#include "Drone.h"
 #include "NetworkStreamer.h"
+#include "Drone.h"
 
 
 //Scene
@@ -275,12 +275,15 @@ void renderCube()
 
 
 GLuint framebuffer_colordepth, colorTexture_drone, depthTexture_drone, rbo_depth;
-GLenum drawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+GLuint gPositionDepth; // GL_COLOR_ATTACHMENT2
+GLuint gNormalRoughness; // GL_COLOR_ATTACHMENT3
+GLenum drawBuffers[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
 void createColorAndDepth()
 {
     glGenFramebuffers(1, &framebuffer_colordepth);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_colordepth);
 
+    // color
     glGenTextures(1, &colorTexture_drone);
     glBindTexture(GL_TEXTURE_2D, colorTexture_drone);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -288,25 +291,137 @@ void createColorAndDepth()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture_drone, 0);
 
+    // depth
     glGenTextures(1, &depthTexture_drone);
     glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depthTexture_drone, 0);
 
-    // 3. Renderbuffer-ul de adâncime (Hardware Depth Test - necesar ca obiectele 3D să nu se deseneze unele peste altele)
+    // position depth
+    glGenTextures(1, &gPositionDepth);
+    glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gPositionDepth, 0);
+
+    // Normal + Roughness Texture
+    glGenTextures(1, &gNormalRoughness);
+    glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gNormalRoughness, 0);
+
+    // 3. Renderbuffer depth
     glGenRenderbuffers(1, &rbo_depth);
     glBindRenderbuffer(GL_RENDERBUFFER, rbo_depth);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, WIDTH, HEIGHT);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo_depth);
 
-    glDrawBuffers(2, drawBuffers);
+    glDrawBuffers(4, drawBuffers);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "EROARE: Framebuffer-ul nu este complet/valid!" << std::endl;
+        std::cerr << "ERROR: Framebuffer INCOMPLETE/NON-VALID!" << std::endl;
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); // Extrem de important! Revenim la ecranul principal.
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+GLuint ssrFBO;
+GLuint ssrTexture;
+void createSSR_framebuffer()
+{
+    glGenFramebuffers(1, &ssrFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+
+    glGenTextures(1, &ssrTexture);
+    glBindTexture(GL_TEXTURE_2D, ssrTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTexture, 0);
+
+    GLenum drawBuf = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuf);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "ERROR: SSR Framebuffer INCOMPLETE!" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+GLuint noiseTexture;
+GLuint ssaoFBO, ssaoBlurFBO, ssaoTexture, ssaoBlured;
+void createSSAOandSamples(std::vector<glm::vec3> &ssaoKernel, std::vector<glm::vec3> &ssaoNoise, Shader &ssaoShader)
+{
+    glGenFramebuffers(1, &ssaoFBO);
+    glGenFramebuffers(1, &ssaoBlurFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+
+    std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0);
+    std::default_random_engine generator;
+
+    for (unsigned int i = 0; i < 64; ++i) {
+        glm::vec3 sample(
+            randomFloats(generator) * 2.0 - 1.0, // X: [-1, 1]
+            randomFloats(generator) * 2.0 - 1.0, // Y: [-1, 1]
+            randomFloats(generator)              // Z: [0, 1] (emisferă)
+        );
+        sample = glm::normalize(sample);
+        sample *= randomFloats(generator);
+
+        // Concetrare mai mare de sample-uri aproape de origine
+        float scale = float(i) / 64.0f;
+        scale = 0.1f + (scale * scale) * (1.0f - 0.1f);
+        sample *= scale;
+
+        ssaoKernel.push_back(sample);
+    }
+
+    for (unsigned int i = 0; i < 16; i++) {
+        glm::vec3 noise(
+            randomFloats(generator) * 2.0 - 1.0,
+            randomFloats(generator) * 2.0 - 1.0,
+            0.0f
+        );
+        ssaoNoise.push_back(noise);
+    }
+
+    glGenTextures(1, &noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, 4, 0, GL_RGB, GL_FLOAT, ssaoNoise.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glGenTextures(1, &ssaoTexture);
+    glBindTexture(GL_TEXTURE_2D, ssaoTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, WIDTH, HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoTexture, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
+    glGenTextures(1, &ssaoBlured);
+    glBindTexture(GL_TEXTURE_2D, ssaoBlured);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, WIDTH, HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoBlured, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 }
 
 unsigned int quadVAO = 0;
@@ -345,12 +460,28 @@ void renderColorAndDepth(Window &myWindow, Shader &quadShader)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
 
-    // 2. Activăm shaderul pentru quad-ul pe tot ecranul
     quadShader.use();
     quadShader.setInt("screenTexture", 0);
     quadShader.setInt("depthTexture", 1);
-    if (glfwGetKey(myWindow.window, GLFW_KEY_M) == GLFW_PRESS)
+    quadShader.setInt("gPositionDepth", 2);
+    quadShader.setInt("gNormalRoughness", 3);
+    quadShader.setInt("ssrTexture", 4);
+    quadShader.setInt("ssaoTexture", 5);
+    quadShader.setInt("ssaoBlurTexture", 6);
+
+
+    if (glfwGetKey(myWindow.window, GLFW_KEY_J) == GLFW_PRESS)
         quadShader.setInt("u_mode", 1);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_K) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 2);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_L) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 3);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_P) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 4);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_O) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 5);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_I) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 6);
     else
         quadShader.setInt("u_mode", 0);
 
@@ -358,6 +489,17 @@ void renderColorAndDepth(Window &myWindow, Shader &quadShader)
     glBindTexture(GL_TEXTURE_2D, colorTexture_drone);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, ssrTexture);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, ssaoTexture);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, ssaoBlured);
 
     renderQuad();
 }
@@ -390,11 +532,15 @@ int main()
     Shader pbrShader("pbr.vert", "pbr.frag");
     Shader debug("bbVisual.vert", "bbVisual.frag");
     Shader quadShader("frame.vert", "frame.frag");
+
+    Shader ssrShader("ssr.vert", "ssr.frag");
+    Shader ssaoShader("ssao.vert", "ssao.frag");
+    Shader ssaoBlurShader("ssaoBlur.vert", "ssaoBlur.frag");
     
     pbrShader.use();
 
     IBL ibl = IBL();
-    ibl.initCubeFromHDR("HDRI/mappo.hdr");
+    ibl.initCubeFromHDR("HDRI/outside.hdr");
 
 
     Model floor = Model("Models/Env/floor.fbx");
@@ -431,6 +577,7 @@ int main()
 
 
     Model drone = Model("Models/Drone/drone.fbx", true);
+    drone.buildTexture("Models/Drone", "Models/Drone/textures_drone.txt");
     drone.move(-2.0f, 5.0f, 1.0f);
     drone.scale(0.5f);
     drone.applyPhysicsConvexHull();
@@ -439,8 +586,19 @@ int main()
     Model propeler = Model("Models/Drone/propeler.fbx");
     propeler.scale(0.5f);
 
-    drone.texture = newModel.texture;
     propeler.texture = newModel.texture;
+
+    Model soldier = Model("Models/Soldier/soldier.fbx");
+    soldier.buildTexture("Models/Soldier", "Models/Soldier/textures_soldier.txt");
+    soldier.rotate_Q(glm::vec3(-90.0f, -90.0f, 0.0f));
+    soldier.scale(3.0f);
+    soldier.move(10.0f, 0.0f, 0.0f);
+
+    Model human = Model("Models/human/human.fbx");
+    human.buildTexture("Models/human", "Models/human/textures.txt");
+    human.rotate_Q(glm::vec3(-90.0f, -90.0f, 0.0f));
+    human.scale(0.61f);
+    human.move(10.0f, 0.0f, 6.0f);
 
     std::vector<Model*> models = { 
         &newModel, 
@@ -450,6 +608,8 @@ int main()
         &metal, 
         &plane,
         &drone,
+        &soldier,
+        &human,
         //&propeler
     };
 
@@ -466,8 +626,13 @@ int main()
 
     ShadowMap shadow = ShadowMap(lightPositions[0]);
 
+    std::vector<glm::vec3> ssaoKernel;
+    std::vector<glm::vec3> ssaoNoise;
+
     createColorAndDepth();
-    FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5555, 1280, 720);
+    createSSR_framebuffer();
+    createSSAOandSamples(ssaoKernel, ssaoNoise, ssaoShader);
+    FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5554, 1280, 720);
     std::vector<unsigned char> colorData(1280 * 720 * 4);
     std::vector<unsigned char> depthData(1280 * 720 * 4);
 
@@ -506,7 +671,7 @@ int main()
     glm::vec3 cameraLocalOffset = glm::vec3(0.0f, 1.5f, 5.0f);
     glm::vec3 lookAtDrone = glm::vec3(0.0f, 0.0f, -1.0f);
     Camera droneAttachedCamera(drone.position + cameraLocalOffset);
-    glm::mat4 projDrone = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
+    glm::mat4 projDrone = glm::perspective(glm::radians(60.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
     droneAttachedCamera.setPerspective(projDrone);
 
     Drone droneSim = Drone(&myWindow, &drone, &propeler, &primObj, &imgui_helper);
@@ -538,8 +703,9 @@ int main()
 
         // render scene, supplying the convoluted irradiance map to the final shader.
         // ------------------------------------------------------------------------------------------
-        glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = camera.GetProjection();
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::vec3 camPosition = camera.Position;
 
         // activate PBR Shader
         // ------------------------------------------------------------------------------------------
@@ -557,12 +723,17 @@ int main()
         pbrShader.setInt("normalMap", 6);
         pbrShader.setInt("roughnessMap", 7);
         pbrShader.setInt("alphaMap", 8);
+
+        pbrShader.setFloat("depth_near", imgui_helper.depth_near);
+        pbrShader.setFloat("depth_far", imgui_helper.depth_far);
+
+        pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
         
         if(!start)
         {
-            pbrShader.setMat4("projection", projection);
-            pbrShader.setMat4("view", view);
-            pbrShader.setVec3("camPos", camera.Position);
+            projection = camera.GetProjection();
+            view = camera.GetViewMatrix();
+            camPosition = camera.Position;
         }
         if (imgui_helper.droneCamera)
         {
@@ -577,10 +748,15 @@ int main()
             glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
             glm::mat4 viewMatrix = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * lookAtDrone), cameraUp);
             glm::mat4 projDrone = droneAttachedCamera.GetProjection();
-            pbrShader.setMat4("projection", projDrone);
-            pbrShader.setMat4("view", viewMatrix);
-            pbrShader.setVec3("camPos", cameraWorldPosition);
+            projection = projDrone;
+            view = viewMatrix;
+            camPosition = cameraWorldPosition;
         }
+
+        glm::mat4 inverseProj = glm::inverse(projection);
+        pbrShader.setMat4("projection", projection);
+        pbrShader.setMat4("view", view);
+        pbrShader.setVec3("camPos", camera.Position);
         
         pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);
         
@@ -627,17 +803,72 @@ int main()
 
 
         //ibl.drawBackground(view, projection);
+       
 
+        //-------------------
+        // SCREEN SPACE PASS
+        // Reflection
+        glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        ssrShader.use();
+        ssrShader.setInt("uPositionDepth", 0);
+        ssrShader.setInt("uNormal", 1);
+        ssrShader.setInt("uColor", 2);
+
+        ssrShader.setMat4("uProjection", projection);
+        ssrShader.setMat4("uInvProjection", inverseProj);
+
+        ssrShader.setInt("uMaxSteps", imgui_helper.uMaxSteps);
+        ssrShader.setInt("uBinarySearchSteps", imgui_helper.uBinarySearchSteps);
+        ssrShader.setFloat("uStepSize", imgui_helper.uStepSize);
+        ssrShader.setFloat("uThickness", imgui_helper.uThickness);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, colorTexture_drone);
+        renderQuad();
+
+        // Ambient Occlussion
+        glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        ssaoShader.use();
+        ssaoShader.setMat4("projection", projection);
+        ssaoShader.setInt("gPosition", 0);
+        ssaoShader.setInt("gNormal", 1);
+        ssaoShader.setInt("texNoise", 2);
+        ssaoShader.setFloat("aoIntensity", imgui_helper.aoMultiplayer);
+        ssaoShader.setFloat("radius", imgui_helper.aoRadius);
+        ssaoShader.setFloat("bias", imgui_helper.aoBias);
+        for (unsigned int i = 0; i < 64; ++i) {
+            ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+        }
+        glm::vec2 screenWH = glm::vec2(WIDTH / 4.0f, HEIGHT / 4.0f);
+        ssaoShader.setVec2("noiseScale", screenWH);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, noiseTexture);
+        renderQuad();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
+        ssaoBlurShader.use();
+        ssaoBlurShader.setInt("ssaoInput", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, ssaoTexture);
+        renderQuad();
 
 
         glLineWidth(2.0f);
-        if (!imgui_helper.droneCamera)
+        if (imgui_helper.physicsDebugRender)
             PhysicsEngine::getInstance().drawDebug(view, projection);
-        else
-        {
 
-        }
-        
         renderColorAndDepth(myWindow, quadShader);
 
         if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) {

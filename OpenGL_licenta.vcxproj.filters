@@ -70,6 +70,12 @@
     <Filter Include="Rendering">
       <UniqueIdentifier>{5ed73b19-0e3d-4815-aa46-33c2da0ee010}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\PBR\SSR">
+      <UniqueIdentifier>{ad883886-d165-43c3-80f1-b1cd978a0fed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\PBR\SSAO">
+      <UniqueIdentifier>{163d17a0-a354-4f8f-94ce-b68af524262c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad.c">
@@ -289,6 +295,24 @@
     </None>
     <None Include="pbr.vert">
       <Filter>Shaders\PBR\PBR Shading</Filter>
+    </None>
+    <None Include="ssr.vert">
+      <Filter>Shaders\PBR\SSR</Filter>
+    </None>
+    <None Include="ssr.frag">
+      <Filter>Shaders\PBR\SSR</Filter>
+    </None>
+    <None Include="ssao.vert">
+      <Filter>Shaders\PBR\SSAO</Filter>
+    </None>
+    <None Include="ssao.frag">
+      <Filter>Shaders\PBR\SSAO</Filter>
+    </None>
+    <None Include="ssaoBlur.vert">
+      <Filter>Shaders\PBR\SSAO</Filter>
+    </None>
+    <None Include="ssaoBlur.frag">
+      <Filter>Shaders\PBR\SSAO</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

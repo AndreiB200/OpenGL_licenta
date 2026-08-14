@@ -13,7 +13,7 @@ public:
 	bool secvential = false;
 
 	//textures edit
-	float metal = 0.0f, roughness = 0.0f;
+	float metal = 0.1f, roughness = 0.4f;
 	float normal[3] = {0.0f,0.0f,0.0f};
 	float color[3] = {0.7f, 0.7f, 0.7f};
 
@@ -66,7 +66,7 @@ public:
 
     // Drone checks
     std::string droneInfo = "";
-    float maxPower = 0.1f;
+
     glm::quat quatDebug;
     glm::vec3 currentPos;
     glm::vec3 quatDummyTest;
@@ -77,36 +77,90 @@ public:
     {
         return maxPower;
     }
-    // PID
+    // States
     bool droneCamera = false;
     bool gamepadState = false;
+    bool physicsDebugRender = true;
+
+    //SSR values
+    int uMaxSteps = 60;
+    int uBinarySearchSteps = 8;
+    float uStepSize = 0.1;
+    float uThickness = 0.2;
+
+    //SSAO values
+    float aoMultiplayer = 1.0f;
+    float aoRadius = 0.5f;
+    float aoBias = 0.025f;
+
+    // Drone target and power
     float droneTargetHeight = 0.0f;
+    float maxPower = 4.0f;
     float minPower = 0.0f;
+    
+    // Drone values for vision
     float rollValue = 0.0f, pitchValue = 0.0f, middlePointDebug = 0.0f, outputRoll = 0.0f, outputPitch = 0.0f;
+    
+    // Filter variables
     float MIN_ALPHA = 0.1f, MAX_ALPHA = 1.0f, NOISE_THRESHOLD = 0.004f, JUMP_THRESHOLD = 0.003f;
     float SENSITIVITY = 2.0f;
+
+    // Ai variables
     bool inteligenta_artificiala = false;
     glm::vec3 targetPosition = glm::vec3(0.0f, 2.0f, 0.0f);
+    bool collision = false;
+    bool remoteControl = false;
+    float depth_near = 0.001f, depth_far = 1000.0f;
+    
+    // Propeller positions
     glm::vec3 posPropeller_FRONTLEFT = glm::vec3(1.88f, -0.35f, 1.62f);
     glm::vec3 posPropeller_BACKLEFT  = glm::vec3(1.69f, -0.35f, -1.56f);
     glm::vec3 posPropeller_FRONTRIGHT= glm::vec3(-1.90f, -0.35f, 1.61f);
     glm::vec3 posPropeller_BACKRIGHT = glm::vec3(-1.72f, -0.35f, -1.57f);
+
+    glm::vec3 targetCollision = glm::vec3(0.0f);
+    glm::vec3 forwardDir = glm::vec3(0.0f);
+
+    float lightWidth = 0.05f;
 
 	void setSlides()
 	{
         Imgui_layer::getInstance().addWidget(new Value("deltaTime:", deltaTime));
         Imgui_layer::getInstance().addWidget(new Value("FPS:", fps));
         Imgui_layer::getInstance().addWidget(new CheckBox("Gamepad connected", &gamepadState));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Remote controll Ai", &remoteControl));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Debug Physics collisions", &physicsDebugRender));
+
+        Imgui_layer::getInstance().addWidget(new InputInt("SSR uMaxSteps", &uMaxSteps, 0, 600));
+        Imgui_layer::getInstance().addWidget(new InputInt("SSR uBinarySearchSteps", &uBinarySearchSteps, 0, 80));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SSR uStepSize", &uStepSize, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SSR uThickness", &uThickness, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SSAO multiplayer", &aoMultiplayer, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SSAO radius", &aoRadius, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SSAO bias", &aoBias, 0.05f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("Light Width", &lightWidth, 0.05f));
+
+
+        
+
 
         Imgui_layer::getInstance().addWidget(new Value("Height target:", &droneTargetHeight));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Drone quaternion"));
         Imgui_layer::getInstance().addWidget(new Value("W:", &quatDebug.w)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" X:", &quatDebug.x)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Y:", &quatDebug.y)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &quatDebug.z));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("Position"));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Drone Position"));
         Imgui_layer::getInstance().addWidget(new Value(" X:", &currentPos.x)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Y:", &currentPos.y)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &currentPos.z));
+        Imgui_layer::getInstance().addWidget(new DragFloat("depth_near", &depth_near, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("depth_far", &depth_far, 0.1f));
+
+        positionSlide("target", targetCollision);
+        Imgui_layer::getInstance().addWidget(new CheckBox("Collision detected?", &collision));
+        positionSlide("directie de mers", forwardDir);
+
 
         // PID values
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
@@ -221,6 +275,25 @@ public:
 
         Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &index, 0, 6));
 	}
+
+    void quaternionSlide(std::string text, glm::quat &quaternion)
+    {
+        std::string localText = "Quaternion " + text;
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(localText));
+        Imgui_layer::getInstance().addWidget(new Value("W:",  &quaternion.w)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" X:", &quaternion.x)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Y:", &quaternion.y)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Z:", &quaternion.z));
+    }
+
+    void positionSlide(std::string text, glm::vec3& positioning)
+    {
+        std::string localText = "Position " + text;
+        Imgui_layer::getInstance().addWidget(new ImGUI_text(localText));
+        Imgui_layer::getInstance().addWidget(new Value(" X:", &positioning.x)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Y:", &positioning.y)); Imgui_layer::getInstance().addWidget(new SameLine());
+        Imgui_layer::getInstance().addWidget(new Value(" Z:", &positioning.z));
+    }
 
 	void setShader(Shader& shader) const
 	{

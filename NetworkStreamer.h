@@ -6,6 +6,7 @@
 #include <queue>
 #include <condition_variable>
 #include <cstring>
+#include <zmq.hpp>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -81,8 +82,10 @@ private:
 
         av_opt_set(codec_ctx->priv_data, "preset", "ultrafast", 0);
         av_opt_set(codec_ctx->priv_data, "tune", "zerolatency", 0);
-        av_opt_set(codec_ctx->priv_data, "profile", "baseline", 0);
-        codec_ctx->bit_rate = 500000; // ~1.5 Mbps pentru rezoluție dublă
+        av_opt_set(codec_ctx->priv_data, "profile", "main", 0);
+        codec_ctx->bit_rate = 2000000;
+        //codec_ctx->rc_max_rate = 2500000;
+        //codec_ctx->rc_buffer_size = 500000;
 
         if (fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
             codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -241,4 +244,117 @@ public:
         frame_queue.push(FrameData{ colorData, depthData });
         cv.notify_one();
     }
+};
+
+
+
+struct DronePose {
+    float x;
+    float y;
+    float z;
+    //quat
+    float qw;
+    float qx;
+    float qy;
+    float qz;
+};
+
+struct PythonCommand {
+    float x;
+    float y;
+    float z;
+    //quat
+    float qw;
+    float qx;
+    float qy;
+    float qz;
+    int   flag;
+};
+
+class ZmqNode {
+public:
+    ZmqNode()
+        : context_(1),
+        pub_socket_(context_, ZMQ_PUB),
+        sub_socket_(context_, ZMQ_SUB),
+        is_running_(false) {
+    }
+
+    ~ZmqNode() {
+        stop();
+    }
+
+    bool init(const std::string& ip = "0.0.0.0", const std::string& pub_port = "5555", const std::string& sub_port = "5556") {
+        try {
+            // 1. Configurare Publisher (C++ -> Python)
+            std::string pub_addr = "tcp://" + ip + ":" + pub_port;
+            pub_socket_.bind(pub_addr);
+            std::cout << "[ZMQ PUB] Bound pe " << pub_addr << std::endl;
+
+            // 2. Configurare Subscriber (Python -> C++)
+            std::string sub_addr = "tcp://" + ip + ":" + sub_port;
+            sub_socket_.bind(sub_addr);
+            sub_socket_.set(zmq::sockopt::subscribe, ""); // Abonare la toate mesajele
+            sub_socket_.set(zmq::sockopt::rcvtimeo, 200);  // Timeout 200ms pentru deblocare curată la stop()
+            std::cout << "[ZMQ SUB] Bound pe " << sub_addr << std::endl;
+
+            return true;
+        }
+        catch (const zmq::error_t& e) {
+            std::cerr << "[ZMQ Error] Initializare esuata: " << e.what() << std::endl;
+            return false;
+        }
+    }
+
+    void start(const DronePose& pose_to_send, PythonCommand& cmd_to_receive, int pub_delay_ms = 20) {
+        if (is_running_) return;
+
+        is_running_ = true;
+        pub_thread_ = std::thread(&ZmqNode::pubWorkerLoop, this, std::ref(pose_to_send), pub_delay_ms);
+        sub_thread_ = std::thread(&ZmqNode::subWorkerLoop, this, std::ref(cmd_to_receive));
+    }
+
+    void stop() {
+        if (is_running_) {
+            is_running_ = false;
+
+            if (pub_thread_.joinable()) pub_thread_.join();
+            if (sub_thread_.joinable()) sub_thread_.join();
+
+            std::cout << "[ZMQ] Ambele thread-uri au fost oprite." << std::endl;
+        }
+    }
+
+private:
+    void pubWorkerLoop(const DronePose& pose, int delay_ms) {
+        while (is_running_) {
+            zmq::message_t msg(&pose, sizeof(DronePose));
+            pub_socket_.send(msg, zmq::send_flags::none);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        }
+    }
+
+    void subWorkerLoop(PythonCommand& cmd_target) {
+        while (is_running_) {
+            zmq::message_t msg;
+            auto res = sub_socket_.recv(msg, zmq::recv_flags::none);
+
+            if (res.has_value() && msg.size() == sizeof(PythonCommand)) {
+                std::memcpy(&cmd_target, msg.data(), sizeof(PythonCommand));
+            }
+            else
+            {
+                cmd_target = PythonCommand{ 0.0f,0.0f,0.0f,0.0f,0.0f,0.0f,0.0f,0 };
+            }
+        }
+    }
+
+    zmq::context_t context_;
+    zmq::socket_t pub_socket_;
+    zmq::socket_t sub_socket_;
+
+    std::thread pub_thread_;
+    std::thread sub_thread_;
+    std::atomic<bool> is_running_;
 };

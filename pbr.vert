@@ -8,6 +8,9 @@ out vec3 WorldPos;
 out vec3 Normal;
 out vec4 WorldPosLightSpace;
 
+out vec3 FragPosViewSpace;
+out vec3 NormalViewSpace;
+
 uniform mat4 projection;
 uniform mat4 view;
 uniform mat4 model;
@@ -18,8 +21,14 @@ uniform mat4 lightSpaceMatrix;
 void main()
 {
     TexCoords = aTexCoords;
-    WorldPos = vec3(model * vec4(aPos, 1.0));
+
+    vec4 worldPos4 = model * vec4(aPos, 1.0);
+    WorldPos = vec3(worldPos4);
     Normal = normalMatrix * aNormal;   
+
+    vec4 viewPos4 = view * worldPos4;
+    FragPosViewSpace = vec3(viewPos4);
+    NormalViewSpace = mat3(view) * Normal;
 
     WorldPosLightSpace = lightSpaceMatrix * vec4(WorldPos, 1.0);
 

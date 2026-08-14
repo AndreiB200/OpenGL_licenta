@@ -11,7 +11,7 @@ class ShadowMap
 {
 public:
 	unsigned int depthMapFBO, depthMap, shadow_WIDTH, shadow_HEIGHT;
-	unsigned int shadowRes = 2048;
+	unsigned int shadowRes = 1024;
 
 	glm::mat4 lightProjection, lightView, lightSpaceMatrix;
 	glm::vec3 lightPos;
@@ -27,8 +27,8 @@ public:
 	{ 
 		lightPos = _lightPos;
 		
-		//lightProjection = glm::ortho(-frustrum, frustrum, -frustrum, frustrum, near_plane, far_plane);
-		lightProjection = glm::perspective(glm::radians(120.0f), static_cast<float>(shadowRes), 0.1f, 100.0f);
+		lightProjection = glm::ortho(-frustrum, frustrum, -frustrum, frustrum, near_plane, far_plane);
+		//lightProjection = glm::perspective(glm::radians(120.0f), static_cast<float>(shadowRes), 0.1f, 100.0f);
 		lightView = glm::lookAt(_lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		lightSpaceMatrix = lightProjection * lightView;		
 

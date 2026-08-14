@@ -233,6 +233,12 @@
     <None Include="shadow.vert" />
     <None Include="shadow_debug.frag" />
     <None Include="shadow_debug.vert" />
+    <None Include="ssao.frag" />
+    <None Include="ssao.vert" />
+    <None Include="ssaoBlur.vert" />
+    <None Include="ssaoBlur.frag" />
+    <None Include="ssr.frag" />
+    <None Include="ssr.vert" />
     <None Include="vertex.vert" />
     <None Include="voxelGen.frag" />
     <None Include="voxelGen.geom" />
