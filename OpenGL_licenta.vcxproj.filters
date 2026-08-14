@@ -314,6 +314,12 @@
     <None Include="ssaoBlur.frag">
       <Filter>Shaders\PBR\SSAO</Filter>
     </None>
+    <None Include="screenbuffer.vert">
+      <Filter>Shaders\PBR</Filter>
+    </None>
+    <None Include="screenbuffer.frag">
+      <Filter>Shaders\PBR</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include=".gitignore.txt">

@@ -229,6 +229,8 @@
     <None Include="pbr.frag" />
     <None Include="pbr.vert" />
     <None Include="rect_to_cube.frag" />
+    <None Include="screenbuffer.frag" />
+    <None Include="screenbuffer.vert" />
     <None Include="shadow.frag" />
     <None Include="shadow.vert" />
     <None Include="shadow_debug.frag" />
