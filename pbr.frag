@@ -1,17 +1,30 @@
+
 #version 460 core
+//layout (location = 0) out vec4 FragColor;
+//layout (location = 1) out vec4 FragLinearDepth;
+//layout (location = 2) out vec4 FragPositionDepth;
+//layout (location = 3) out vec4 FragNormalRoughness;
+
 layout (location = 0) out vec4 FragColor;
-layout (location = 1) out vec4 FragLinearDepth;
-layout (location = 2) out vec4 FragPositionDepth;
-layout (location = 3) out vec4 FragNormalRoughness;
+layout (location = 1) out vec3 SaveDepth;
+
+
+uniform sampler2D gPosition;
+uniform sampler2D gNormal;
+uniform sampler2D gAlbedo;
+uniform sampler2D gARM;
 
 in vec2 TexCoords;
-in vec3 WorldPos;
-in vec3 Normal;
 
-in vec4 WorldPosLightSpace;
+uniform mat4 lightSpaceMatrix;
 
-in vec3 FragPosViewSpace;
-in vec3 NormalViewSpace;
+//in vec3 WorldPos;
+//in vec3 Normal;
+
+vec4 WorldPosLightSpace;
+
+vec3 FragPosViewSpace;
+vec3 NormalViewSpace;
 
 // material parameters
 uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
@@ -24,15 +37,15 @@ uniform bool useAlpha = false;
 uniform vec3 emision;
 
 // material textures
-uniform sampler2D albedoMap;
-uniform sampler2D normalMap;
-uniform sampler2D metallicMap;
-uniform sampler2D roughnessMap;
-uniform sampler2D alphaMap;
-
+//uniform sampler2D albedoMap;
+//uniform sampler2D normalMap;
+//uniform sampler2D metallicMap;
+//uniform sampler2D roughnessMap;
+//uniform sampler2D alphaMap;
+//
 
 //textures or parameter switch
-uniform int textureSelect = 0;
+uniform int textureSelect = 1;
 uniform bool start = false;
 
 //shadow map
@@ -102,17 +115,17 @@ const vec2 poissonDisk[32] = vec2[](
 uniform float lightWidth = 0.05;
 
 // ----------------------------------------------------------------------------
-vec3 bbReflection(vec3 R, vec3 bbMax, vec3 bbMin, vec3 bbPos)
-{
-    vec3 intersectMaxPointPlanes = (bbMax-WorldPos) / R;
-    vec3 intersectMinPointPlanes = (bbMin-WorldPos) / R;
-    vec3 largestParams = max(intersectMaxPointPlanes,intersectMinPointPlanes);
-    float distToIntersect = min(min(largestParams.x, largestParams.y), largestParams.z);
-    vec3 intersectPointsWS = WorldPos + R * distToIntersect;
-    vec3 localCorrReflDirWS = intersectPointsWS - bbPos;
-
-    return localCorrReflDirWS;
-}
+//vec3 bbReflection(vec3 R, vec3 bbMax, vec3 bbMin, vec3 bbPos)
+//{
+//    vec3 intersectMaxPointPlanes = (bbMax-WorldPos) / R;
+//    vec3 intersectMinPointPlanes = (bbMin-WorldPos) / R;
+//    vec3 largestParams = max(intersectMaxPointPlanes,intersectMinPointPlanes);
+//    float distToIntersect = min(min(largestParams.x, largestParams.y), largestParams.z);
+//    vec3 intersectPointsWS = WorldPos + R * distToIntersect;
+//    vec3 localCorrReflDirWS = intersectPointsWS - bbPos;
+//
+//    return localCorrReflDirWS;
+//}
 // ----------------------------------------------------------------------------
 float randomAngle(vec2 seed) {
     return dot(sin(seed * vec2(12.9898, 78.233)), vec2(43758.5453)) * 6.28318530718;
@@ -138,8 +151,9 @@ float FindBlockerDistance(vec3 projCoords, float currentDepth, float bias)
     return avgBlockerDepth / float(blockers);
 }
 
-float ShadowCalculation(vec4 fragPosLightSpace)
+float ShadowCalculation(vec3 worldPos)
 {   
+    vec4 fragPosLightSpace = lightSpaceMatrix * vec4(worldPos, 1.0);
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
     float shadow = 0.0;
@@ -147,8 +161,8 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     
     float currentDepth = projCoords.z;
     
-    vec3 normal = normalize(Normal);
-    vec3 lightDir = normalize(lightPositions[0] - WorldPos);
+    vec3 normal = normalize(texture(gNormal,TexCoords).rgb);
+    vec3 lightDir = normalize(lightPositions[0] - texture(gPosition,TexCoords).rgb);
     float bias = max(shadowUp * (1.0 - dot(normal, lightDir)), shadowBias);
 
     float avgBlockerDepth = FindBlockerDistance(projCoords, currentDepth, bias);
@@ -184,22 +198,22 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     return shadow;
 }
 // ----------------------------------------------------------------------------
-vec3 getNormalFromMap()
-{
-    vec3 tangentNormal = texture(normalMap, TexCoords).xyz * 2.0 - 1.0;
-
-    vec3 Q1  = dFdx(WorldPos);
-    vec3 Q2  = dFdy(WorldPos);
-    vec2 st1 = dFdx(TexCoords);
-    vec2 st2 = dFdy(TexCoords);
-
-    vec3 N   = normalize(Normal);
-    vec3 T  = normalize(Q1*st2.t - Q2*st1.t);
-    vec3 B  = -normalize(cross(N, T));
-    mat3 TBN = mat3(T, B, N);
-
-    return normalize(TBN * tangentNormal);
-}
+//vec3 getNormalFromMap()
+//{
+//    vec3 tangentNormal = texture(normalMap, TexCoords).xyz * 2.0 - 1.0;
+//
+//    vec3 Q1  = dFdx(WorldPos);
+//    vec3 Q2  = dFdy(WorldPos);
+//    vec2 st1 = dFdx(TexCoords);
+//    vec2 st2 = dFdy(TexCoords);
+//
+//    vec3 N   = normalize(Normal);
+//    vec3 T  = normalize(Q1*st2.t - Q2*st1.t);
+//    vec3 B  = -normalize(cross(N, T));
+//    mat3 TBN = mat3(T, B, N);
+//
+//    return normalize(TBN * tangentNormal);
+//}
 // ----------------------------------------------------------------------------
 float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
@@ -252,47 +266,48 @@ void runLight()
     vec3 albedo;
     float metallic;
     float roughness;
-    vec3 N = vec3(1.0,1.0,1.0);
+    vec3 ARM = texture(gARM, TexCoords).rgb;
+    vec3 N = vec3(0.0,0.0,0.0);
   
     if(textureSelect == 0)
     {   
         albedo = u_albedo;
         metallic = u_metallic;
         roughness = u_roughness;
-        N = Normal;
+        N = texture(gNormal, TexCoords).rgb;
     }
     if(textureSelect == 1)
     {
-        albedo = pow(texture(albedoMap, TexCoords).rgb, vec3(2.2));
-        metallic = texture(metallicMap, TexCoords).r;
-        roughness = texture(roughnessMap, TexCoords).r;
-        N = getNormalFromMap();
+        albedo = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
+        metallic = ARM.g;
+        roughness = ARM.r;
+        N = texture(gNormal, TexCoords).rgb;
     }
 
 
     if(textureSelect == 2)
     {
-        albedo = pow(texture(albedoMap, TexCoords).rgb, vec3(2.2));
-        metallic = u_metallic;
-        roughness = u_roughness;
-        N = Normal;
+        albedo = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
+        metallic = u_metallic; // screen buffer...
+        roughness = u_roughness;  // screen buffer...
+        N = texture(gNormal, TexCoords).rgb;
     }
     if(textureSelect == 3)
     {
-        albedo = pow(texture(metallicMap, TexCoords).rgb, vec3(2.2));
+        albedo = pow(vec3(ARM.g), vec3(2.2));
         metallic = u_metallic;
         roughness = u_roughness;
-        N = Normal;
+        N = texture(gNormal, TexCoords).rgb;
     }
     if(textureSelect == 4)
     {
-        albedo = pow(texture(roughnessMap, TexCoords).rgb, vec3(2.2));
+        albedo = pow(vec3(ARM.r), vec3(2.2));
         metallic = u_metallic;
         roughness = u_roughness;
-        N = Normal;
+        N = texture(gNormal, TexCoords).rgb;
     }
 
-
+    vec3 WorldPos = texture(gPosition, TexCoords).rgb;
     vec3 V = normalize(camPos - WorldPos);
     vec3 R = reflect(-V, N); 
 
@@ -300,7 +315,7 @@ void runLight()
     F0 = mix(F0, albedo, metallic);
 
     vec3 Lo = vec3(0.0);
-    float shadowCol, shadow = ShadowCalculation(WorldPosLightSpace);
+    float shadowCol, shadow = ShadowCalculation(WorldPos);
     shadowCol = 1.0 - shadow;
 
     for(int i = 0; i < 1; ++i) 
@@ -339,13 +354,13 @@ void runLight()
     vec3 bbMin = vec3(-3.0,-1.0,-3.0);
     vec3 bbPos = vec3(0.0,1.5,0.0);
 
-    vec3 totalRefletion = bbReflection(R, bbMaxDefault, bbMinDefault, bbPosDefault);
-    bvec3 a = lessThanEqual(WorldPos, bbMax + vec3(0.0001));
-    bvec3 b = lessThanEqual(bbMin - vec3(0.0001), WorldPos);
-    if(a == b)
-    {
-        totalRefletion = bbReflection(R, bbMax, bbMin, bbPos);
-    }
+//    vec3 totalRefletion = bbReflection(R, bbMaxDefault, bbMinDefault, bbPosDefault);
+//    bvec3 a = lessThanEqual(WorldPos, bbMax + vec3(0.0001));
+//    bvec3 b = lessThanEqual(bbMin - vec3(0.0001), WorldPos);
+//    if(a == b)
+//    {
+//        totalRefletion = bbReflection(R, bbMax, bbMin, bbPos);
+//    }
 
     vec3 irradiance = texture(irradianceMap, N).rgb;
     vec3 diffuse    = irradiance * albedo;
@@ -374,25 +389,20 @@ void runLight()
         color = pow(color, vec3(1.0/2.2)); 
 
     float alphaVal = 1.0;
-    if(useAlpha)
-        alphaVal = texture(alphaMap, TexCoords).r;
+//    if(useAlpha)
+//        alphaVal = texture(alphaMap, TexCoords).r;
 
-    FragColor = vec4(color, alphaVal);
 
-    FragPositionDepth = vec4(FragPosViewSpace, FragPosViewSpace.z);
-
-    N = normalize(NormalViewSpace);
-    FragNormalRoughness = vec4(N, roughness);
-
+    FragColor = vec4(color,1.0);
     //FragColor = vec4(lightDebug, 1.0);
 }
 
 void runDepth()
 {   
-    float z = gl_FragCoord.z * 2.0 - 1.0; // Back to NDC 
+    float z = texture(gPosition,TexCoords).b * 2.0 - 1.0; // Back to NDC 
 
     float liniar = (2.0 * depth_near * depth_far) / (depth_far + depth_near - z * (depth_far - depth_near));
-    FragLinearDepth = vec4(vec3(liniar), 1.0);
+    SaveDepth = vec3(liniar);
 }
 
 void main()

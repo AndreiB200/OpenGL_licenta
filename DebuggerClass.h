@@ -22,7 +22,7 @@ public:
 
 	int index = 0;
 
-	int textureSelect = 0; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
+	int textureSelect = 1; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
 
     // Variables that need to be attached (prototype, needs improvment)
     float *deltaTime;

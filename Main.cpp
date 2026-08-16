@@ -295,12 +295,12 @@ void createColorAndDepth()
 
     //-----------------------------------------------------------------------------------------------------------
     // depth - NEEDS CHANGES - 3
-    glGenTextures(1, &depthTexture_drone);
-    glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, depthTexture_drone, 0);
+    //glGenTextures(1, &depthTexture_drone);
+    //glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    //glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, depthTexture_drone, 0);
     //-----------------------------------------------------------------------------------------------------------
 
     // Position depth - 3
@@ -324,12 +324,12 @@ void createColorAndDepth()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gNormalRoughness, 0);
 
     // gARM (without ambient occlusion on first pass)
-    glGenTextures(1, &gAlbedo);
-    glBindTexture(GL_TEXTURE_2D, gAlbedo);
+    glGenTextures(1, &gARM);
+    glBindTexture(GL_TEXTURE_2D, gARM);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gAlbedo, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gARM, 0);
 
     // Renderbuffer depth
     glGenRenderbuffers(1, &rbo_depth);
@@ -368,6 +368,41 @@ void createSSR_framebuffer()
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         std::cerr << "ERROR: SSR Framebuffer INCOMPLETE!" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+GLuint pbrFBO;
+GLuint pbrTexture, depthTextureSaved;
+void createPBR_framebuffer()
+{
+    glGenFramebuffers(1, &pbrFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+
+    glGenTextures(1, &pbrTexture);
+    glBindTexture(GL_TEXTURE_2D, pbrTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pbrTexture, 0);
+
+    glGenTextures(1, &depthTextureSaved);
+    glBindTexture(GL_TEXTURE_2D, depthTextureSaved);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depthTextureSaved, 0);
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo_depth);
+
+    GLenum drawBuf[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, drawBuf);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "ERROR: PBR Framebuffer INCOMPLETE!" << std::endl;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -494,13 +529,15 @@ void renderColorAndDepth(Window &myWindow, Shader &quadShader)
         quadShader.setInt("u_mode", 5);
     else if (glfwGetKey(myWindow.window, GLFW_KEY_I) == GLFW_PRESS)
         quadShader.setInt("u_mode", 6);
+    else if (glfwGetKey(myWindow.window, GLFW_KEY_H) == GLFW_PRESS)
+        quadShader.setInt("u_mode", 7);
     else
         quadShader.setInt("u_mode", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, gAlbedo);
+    glBindTexture(GL_TEXTURE_2D, pbrTexture);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
+    glBindTexture(GL_TEXTURE_2D, gAlbedo);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, gPositionDepth);
     glActiveTexture(GL_TEXTURE3);
@@ -550,7 +587,6 @@ int main()
     Shader ssaoShader("ssao.vert", "ssao.frag");
     Shader ssaoBlurShader("ssaoBlur.vert", "ssaoBlur.frag");
     
-    pbrShader.use();
 
     IBL ibl = IBL();
     ibl.initCubeFromHDR("HDRI/outside.hdr");
@@ -643,6 +679,7 @@ int main()
     std::vector<glm::vec3> ssaoNoise;
 
     createColorAndDepth();
+    createPBR_framebuffer();
     createSSR_framebuffer();
     createSSAOandSamples(ssaoKernel, ssaoNoise, ssaoShader);
     FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5554, 1280, 720);
@@ -787,9 +824,9 @@ int main()
         //imgui_helper.setShader(pbrShader);
 
         // bind pre-computed IBL data
-        glActiveTexture(GL_TEXTURE0);
+        /*glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
-        ibl.bind(1);
+        ibl.bind(1);*/
 
             glm::vec3 newPos = lightPositions[0];
             //pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
@@ -822,6 +859,47 @@ int main()
         droneSim.depthProc(depthData);
         streamer.PushFrame(colorData, depthData);
 
+        // PBR SHADING 
+        glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        pbrShader.use();
+        imgui_helper.setShader(pbrShader);
+        pbrShader.setVec3("camPos", camera.Position);
+
+        pbrShader.setInt("shadowMap", 0);
+        //// set IBL Maps 1-->3
+        pbrShader.setInt("irradianceMap", 1);
+        pbrShader.setInt("prefilterMap", 2);
+        pbrShader.setInt("brdfLUT", 3);
+
+        pbrShader.setInt("gPosition", 4);
+        pbrShader.setInt("gNormal", 5);
+        pbrShader.setInt("gAlbedo", 6);
+        pbrShader.setInt("gARM", 7);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
+        ibl.bind(1);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, gAlbedo);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, gARM);
+        
+        pbrShader.setVec3("camPos", camera.Position);
+        pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
+        lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
+        pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
+        pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);
+
+        pbrShader.setFloat("depth_near", imgui_helper.depth_near);
+        pbrShader.setFloat("depth_far", imgui_helper.depth_far);
+        pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
+        renderQuad();
 
         //ibl.drawBackground(view, projection);
        
@@ -886,11 +964,12 @@ int main()
         renderQuad();
 
 
+
+        renderColorAndDepth(myWindow, quadShader);
+
         glLineWidth(2.0f);
         if (imgui_helper.physicsDebugRender)
             PhysicsEngine::getInstance().drawDebug(view, projection);
-
-        renderColorAndDepth(myWindow, quadShader);
 
         if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) {
             shadow.lightPos = lightPositions[0];
