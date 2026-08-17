@@ -4,10 +4,11 @@ out vec4 FragColor;
 
 in vec2 TexCoords;
 
-uniform sampler2D screenTexture;
+uniform sampler2D gAlbedo;
 uniform sampler2D depthTexture;  
 uniform sampler2D gPositionDepth;
 uniform sampler2D gNormalRoughness;  
+
 uniform sampler2D ssrTexture;
 uniform sampler2D ssaoTexture;
 uniform sampler2D ssaoBlurTexture;
@@ -38,7 +39,7 @@ float FresnelSchlick(float cosTheta, float F0) {
 }
 
 void main() {
-    FragColor = texture(screenTexture, TexCoords);
+    FragColor = texture(gAlbedo, TexCoords);
     if (u_mode == 1) {
         float depth = texture(depthTexture, TexCoords).r;
         float near_plane = 0.001;
@@ -63,10 +64,15 @@ void main() {
      else if (u_mode == 6) {
         FragColor = vec4(vec3(texture(ssaoBlurTexture, TexCoords).r), 1.0);
     }
+    else if(u_mode == 7)
+    {
+        vec3 baseColor = texture(gAlbedo, TexCoords).rgb;
+        FragColor = vec4(baseColor, 1.0);
+    }
     else {
-        vec3 baseColor = texture(screenTexture, TexCoords).rgb;
+        vec3 baseColor = texture(gAlbedo, TexCoords).rgb;
         float roughness = texture(gNormalRoughness, TexCoords).a;
-        float lod = clamp((roughness + 0.4) * uMaxMipLevel * 1.2, 0.0, 1.0);
+        float lod = clamp(roughness * uMaxMipLevel, 0.0, 1.0);
 
         vec4 ssrSample = textureLod(ssrTexture, TexCoords, lod);
         vec3 ssrColor = ssrSample.rgb;

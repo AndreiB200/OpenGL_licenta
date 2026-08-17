@@ -296,7 +296,7 @@ public:
 		myTimer.startClock();
 		glGenTextures(1, &prefilterMap);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
-		const unsigned int size = 256;
+		const unsigned int size = 512;
 		for (unsigned int i = 0; i < 6; ++i)
 		{
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size, size, 0, GL_RGB, GL_FLOAT, nullptr);

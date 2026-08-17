@@ -212,6 +212,9 @@
     <ClInclude Include="Gamepad.h">
       <Filter>Header Files\Debuggers class</Filter>
     </ClInclude>
+    <ClInclude Include="FrameCapturer.h">
+      <Filter>Header Files\Debuggers class</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="voxelGen.vert">
@@ -313,6 +316,12 @@
     </None>
     <None Include="ssaoBlur.frag">
       <Filter>Shaders\PBR\SSAO</Filter>
+    </None>
+    <None Include="screenbuffer.vert">
+      <Filter>Shaders\PBR</Filter>
+    </None>
+    <None Include="screenbuffer.frag">
+      <Filter>Shaders\PBR</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

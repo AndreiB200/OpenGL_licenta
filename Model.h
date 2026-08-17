@@ -130,7 +130,7 @@ public:
         for (unsigned int i = 0; i < meshNumbers; i++)
         {
             glDisable(GL_BLEND);
-            shader.setBool("useAlpha", false);
+            //shader.setBool("useAlpha", false);
             glActiveTexture(GL_TEXTURE4);
             glBindTexture(GL_TEXTURE_2D, texture[i].albedo);
             glActiveTexture(GL_TEXTURE5);
@@ -139,13 +139,13 @@ public:
             glBindTexture(GL_TEXTURE_2D, texture[i].normal);
             glActiveTexture(GL_TEXTURE7);
             glBindTexture(GL_TEXTURE_2D, texture[i].roughness);
-            if (i < 1 && textureAlpha != 0) {
+            /*if (i < 1 && textureAlpha != 0) {
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 glActiveTexture(GL_TEXTURE8);
                 glBindTexture(GL_TEXTURE_2D, textureAlpha);
                 shader.setBool("useAlpha", true);
-            }
+            }*/
             meshes[i].Draw(shader);
         }
     }

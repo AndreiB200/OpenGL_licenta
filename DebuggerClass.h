@@ -22,7 +22,7 @@ public:
 
 	int index = 0;
 
-	int textureSelect = 0; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
+	int textureSelect = 1; //0 constant color, 1 textured, 2 color, 3 metal, 4 roughness
 
     // Variables that need to be attached (prototype, needs improvment)
     float *deltaTime;
@@ -249,7 +249,7 @@ public:
         Imgui_layer::getInstance().addWidget(new InputInt("Texture ID", &newModel->selectTexture, 0, static_cast<int>(newModel->texture.size() - 1)));
 
         Imgui_layer::getInstance().addWidget(new ImGUI_text("Modify material"));
-        Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &textureSelect, 0, 4));
+        Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &textureSelect, 0, 1));
         Imgui_layer::getInstance().addWidget(new Slider3("Color", color, 0.0f, 1.0f));
         Imgui_layer::getInstance().addWidget(new Slider("Metal", &metal, 0.0f, 1.0f));
         Imgui_layer::getInstance().addWidget(new Slider("Roughness", &roughness, 0.0f, 1.0f));
@@ -295,15 +295,17 @@ public:
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &positioning.z));
     }
 
-	void setShader(Shader& shader) const
+	void setShader(Shader& shader, Shader &gShader) const
 	{
-		shader.setInt("textureSelect", textureSelect);
+        gShader.use();
+        gShader.setInt("textureSelect", textureSelect);
 
-		shader.setVec3("u_albedo", glm::vec3(color[0], color[1], color[2]));
-		shader.setFloat("u_metallic", metal);
-		shader.setFloat("u_roughness", roughness);
-		shader.setVec3("u_normal", glm::vec3(normal[0], normal[1], normal[2]));
+        gShader.setVec3("u_albedo", glm::vec3(color[0], color[1], color[2]));
+        gShader.setFloat("u_metallic", metal);
+        gShader.setFloat("u_roughness", roughness);
+        gShader.setVec3("u_normal", glm::vec3(normal[0], normal[1], normal[2]));
 
+        shader.use();
 		shader.setFloat("shadowUp", shadowUp);
 		shader.setFloat("shadowBias", shadowBias);
 		shader.setInt("pcfSize", pcfSize);

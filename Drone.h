@@ -157,7 +157,7 @@ public:
 
         // collision detection
         float distanceToObstacle = middlePoint * 25.0f;
-        bool isCollidingNow = (distanceToObstacle < 2.0f);
+        bool isCollidingNow = (distanceToObstacle < -1.0f); // CHANGE ITTT !!!!!!
         if (isCollidingNow)
         {
             targetCollision = currentPos + (moveDirection * 5.0f); // slow down, integrate movement yaw
