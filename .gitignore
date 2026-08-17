@@ -2,6 +2,7 @@ x64/
 x86/
 Debug/
 Release/
+Libraries/
 
 .vs/
 OpenGL_licenta/
