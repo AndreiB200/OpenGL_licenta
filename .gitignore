@@ -3,6 +3,7 @@ x86/
 Debug/
 Release/
 Libraries/
+HDRI/
 
 .vs/
 OpenGL_licenta/
