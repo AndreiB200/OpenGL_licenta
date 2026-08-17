@@ -72,7 +72,7 @@ void main() {
     else {
         vec3 baseColor = texture(gAlbedo, TexCoords).rgb;
         float roughness = texture(gNormalRoughness, TexCoords).a;
-        float lod = clamp((roughness + 0.4) * uMaxMipLevel * 1.2, 0.0, 1.0);
+        float lod = clamp(roughness * uMaxMipLevel, 0.0, 1.0);
 
         vec4 ssrSample = textureLod(ssrTexture, TexCoords, lod);
         vec3 ssrColor = ssrSample.rgb;

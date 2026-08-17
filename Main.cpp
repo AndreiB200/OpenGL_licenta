@@ -43,6 +43,7 @@
 #include "Gamepad.h"
 #include "NetworkStreamer.h"
 #include "Drone.h"
+#include "FrameCapturer.h"
 
 
 //Scene
@@ -293,16 +294,6 @@ void createColorAndDepth()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gAlbedo, 0);
 
-    //-----------------------------------------------------------------------------------------------------------
-    // depth - NEEDS CHANGES - 3
-    //glGenTextures(1, &depthTexture_drone);
-    //glBindTexture(GL_TEXTURE_2D, depthTexture_drone);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    //glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, depthTexture_drone, 0);
-    //-----------------------------------------------------------------------------------------------------------
-
     // Position depth - 3
     glGenTextures(1, &gPositionDepth);
     glBindTexture(GL_TEXTURE_2D, gPositionDepth);
@@ -391,7 +382,7 @@ void createPBR_framebuffer()
 
     glGenTextures(1, &depthTextureSaved);
     glBindTexture(GL_TEXTURE_2D, depthTextureSaved);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depthTextureSaved, 0);
@@ -442,6 +433,11 @@ void createSSAOandSamples(std::vector<glm::vec3> &ssaoKernel, std::vector<glm::v
             0.0f
         );
         ssaoNoise.push_back(noise);
+    }
+
+    ssaoShader.use();
+    for (unsigned int i = 0; i < 64; ++i) {
+        ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
     }
 
     glGenTextures(1, &noiseTexture);
@@ -537,7 +533,7 @@ void renderColorAndDepth(Window &myWindow, Shader &quadShader)
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, pbrTexture);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, gAlbedo);
+    glBindTexture(GL_TEXTURE_2D, depthTextureSaved);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, gPositionDepth);
     glActiveTexture(GL_TEXTURE3);
@@ -602,9 +598,6 @@ int main()
     depthScene.move(0.0f, 15.0f, 0.0f);
 
     Model newModel = Model("Models/model.fbx", true);
-    //Model newModel = Model("Models/Porsche/porsche.fbx");
-    //newModel.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
-    //newModel.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
     newModel.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
     newModel.move(5.0f, 3.0f, 0.0f);
     newModel.applyPhysicsConvexHull();
@@ -649,6 +642,12 @@ int main()
     human.scale(0.61f);
     human.move(10.0f, 0.0f, 6.0f);
 
+    //Model porsche = Model("Models/Porsche/porsche.fbx");
+    //porsche.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
+    //porsche.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
+    //porsche.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
+
+
     std::vector<Model*> models = { 
         &newModel, 
         //&proxy, 
@@ -685,6 +684,7 @@ int main()
     FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5554, 1280, 720);
     std::vector<unsigned char> colorData(1280 * 720 * 4);
     std::vector<unsigned char> depthData(1280 * 720 * 4);
+    FrameCapturer capturer(1280, 720);
 
     // initialize static shader uniforms before rendering
     // --------------------------------------------------
@@ -734,6 +734,8 @@ int main()
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         fps = 1.0f / deltaTime;
+
+        imgui_helper.setShader(pbrShader, geometryShaderBuffer);
 
         gamepad.update();
 
@@ -815,20 +817,8 @@ int main()
         geometryShaderBuffer.setInt("normalMap", 6);
         geometryShaderBuffer.setInt("roughnessMap", 7);
 
-       /* pbrShader.setMat4("projection", projection);
-        pbrShader.setMat4("view", view);
-        pbrShader.setVec3("camPos", camera.Position);
-        
-        pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);*/
-        
-        //imgui_helper.setShader(pbrShader);
-
-        // bind pre-computed IBL data
-        /*glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
-        ibl.bind(1);*/
-
             glm::vec3 newPos = lightPositions[0];
+            shadow.lightPos = lightPositions[0];
             //pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
             //pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
             lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
@@ -852,100 +842,22 @@ int main()
             }
         }
 
-        glReadBuffer(GL_COLOR_ATTACHMENT0);
-        glReadPixels(0, 0, 1280, 720, GL_RGBA, GL_UNSIGNED_BYTE, colorData.data());
-        glReadBuffer(GL_COLOR_ATTACHMENT1);
-        glReadPixels(0, 0, 1280, 720, GL_RGBA, GL_UNSIGNED_BYTE, depthData.data());
-        droneSim.depthProc(depthData);
-        streamer.PushFrame(colorData, depthData);
-
-        // PBR SHADING 
-        glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        pbrShader.use();
-        imgui_helper.setShader(pbrShader);
-        pbrShader.setVec3("camPos", camera.Position);
-
-        pbrShader.setInt("shadowMap", 0);
-        //// set IBL Maps 1-->3
-        pbrShader.setInt("irradianceMap", 1);
-        pbrShader.setInt("prefilterMap", 2);
-        pbrShader.setInt("brdfLUT", 3);
-
-        pbrShader.setInt("gPosition", 4);
-        pbrShader.setInt("gNormal", 5);
-        pbrShader.setInt("gAlbedo", 6);
-        pbrShader.setInt("gARM", 7);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
-        ibl.bind(1);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D, gAlbedo);
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, gARM);
-        
-        pbrShader.setVec3("camPos", camera.Position);
-        pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
-        lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
-        pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
-        pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);
-
-        pbrShader.setFloat("depth_near", imgui_helper.depth_near);
-        pbrShader.setFloat("depth_far", imgui_helper.depth_far);
-        pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
-        renderQuad();
-
-        //ibl.drawBackground(view, projection);
-       
-
         //-------------------
         // SCREEN SPACE PASS
-        // Reflection
-        glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        ssrShader.use();
-        ssrShader.setInt("uPositionDepth", 0);
-        ssrShader.setInt("uNormal", 1);
-        ssrShader.setInt("uColor", 2);
-
-        ssrShader.setMat4("uProjection", projection);
-        ssrShader.setMat4("uInvProjection", inverseProj);
-
-        ssrShader.setInt("uMaxSteps", imgui_helper.uMaxSteps);
-        ssrShader.setInt("uBinarySearchSteps", imgui_helper.uBinarySearchSteps);
-        ssrShader.setFloat("uStepSize", imgui_helper.uStepSize);
-        ssrShader.setFloat("uThickness", imgui_helper.uThickness);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, gAlbedo);
-        renderQuad();
-
         // Ambient Occlussion
         glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ssaoShader.use();
         ssaoShader.setMat4("projection", projection);
+        ssaoShader.setMat4("view", view);
+
         ssaoShader.setInt("gPosition", 0);
         ssaoShader.setInt("gNormal", 1);
         ssaoShader.setInt("texNoise", 2);
         ssaoShader.setFloat("aoIntensity", imgui_helper.aoMultiplayer);
         ssaoShader.setFloat("radius", imgui_helper.aoRadius);
         ssaoShader.setFloat("bias", imgui_helper.aoBias);
-        for (unsigned int i = 0; i < 64; ++i) {
-            ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
-        }
         glm::vec2 screenWH = glm::vec2(WIDTH / 4.0f, HEIGHT / 4.0f);
         ssaoShader.setVec2("noiseScale", screenWH);
         glActiveTexture(GL_TEXTURE0);
@@ -962,8 +874,89 @@ int main()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, ssaoTexture);
         renderQuad();
+        
+
+        // PBR SHADING 
+        glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        pbrShader.use();
+        pbrShader.setVec3("camPos", camera.Position);
+        pbrShader.setMat4("view", view);
+
+        pbrShader.setInt("shadowMap", 0);
+        //// set IBL Maps 1-->3
+        pbrShader.setInt("irradianceMap", 1);
+        pbrShader.setInt("prefilterMap", 2);
+        pbrShader.setInt("brdfLUT", 3);
+
+        pbrShader.setInt("gPosition", 4);
+        pbrShader.setInt("gNormal", 5);
+        pbrShader.setInt("gAlbedo", 6);
+        pbrShader.setInt("gARM", 7);
+        pbrShader.setInt("ssaoBlured", 8);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, shadow.depthMap);
+        ibl.bind(1);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, gAlbedo);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, gARM);
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D, ssaoBlured);
+
+        
+        pbrShader.setVec3("camPos", camera.Position);
+        pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
+        lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
+        pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
+        pbrShader.setMat4("lightSpaceMatrix", shadow.lightSpaceMatrix);
+
+        pbrShader.setFloat("depth_near", imgui_helper.depth_near);
+        pbrShader.setFloat("depth_far", imgui_helper.depth_far);
+        pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
+        renderQuad();
+
+        //ibl.drawBackground(view, projection);
+       
+
+        // Reflection
+        glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        ssrShader.use();
+        ssrShader.setInt("gPosition", 0);
+        ssrShader.setInt("gNormal", 1);
+        ssrShader.setInt("gAlbedo", 2);
+        ssrShader.setInt("gARM", 3);
 
 
+        ssrShader.setMat4("uProjection", projection);
+        ssrShader.setMat4("uView", view);
+
+        ssrShader.setInt("uMaxSteps", imgui_helper.uMaxSteps);
+        ssrShader.setInt("uBinarySearchSteps", imgui_helper.uBinarySearchSteps);
+        ssrShader.setFloat("uStepSize", imgui_helper.uStepSize);
+        ssrShader.setFloat("uThickness", imgui_helper.uThickness);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gPositionDepth);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gNormalRoughness);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, pbrTexture);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, gARM);
+        renderQuad();
+
+
+        //glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+        //capturer.CaptureAndProcess(droneSim, streamer);
 
         renderColorAndDepth(myWindow, quadShader);
 
@@ -971,8 +964,8 @@ int main()
         if (imgui_helper.physicsDebugRender)
             PhysicsEngine::getInstance().drawDebug(view, projection);
 
-        if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) {
-            shadow.lightPos = lightPositions[0];
+        if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) 
+        {
             shadow.shadowDebug();
         }
 

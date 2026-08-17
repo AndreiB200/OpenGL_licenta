@@ -13,6 +13,7 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
 uniform sampler2D gARM;
+uniform sampler2D ssaoBlured;
 
 in vec2 TexCoords;
 
@@ -21,10 +22,6 @@ uniform mat4 lightSpaceMatrix;
 //in vec3 WorldPos;
 //in vec3 Normal;
 
-vec4 WorldPosLightSpace;
-
-vec3 FragPosViewSpace;
-vec3 NormalViewSpace;
 
 // material parameters
 uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
@@ -32,7 +29,7 @@ uniform float u_metallic = 0.0;
 uniform float u_roughness = 0.0;
 uniform vec3 u_normal = vec3(0.0f, 0.0f, 0.0f);
 uniform float ao = 1.0;
-uniform bool useAlpha = false;
+//uniform bool useAlpha = false;
 
 uniform vec3 emision;
 
@@ -62,6 +59,7 @@ uniform vec3 lightPositions[1];
 uniform vec3 lightColors[1];
 
 uniform vec3 camPos;
+uniform mat4 view;
 
 const float PI = 3.14159265359;
 
@@ -371,7 +369,8 @@ void runLight()
     vec2 brdf  = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
+    float ambientOcclusion = texture(ssaoBlured, TexCoords).r;
+    vec3 ambient = (kD * diffuse + specular) * (ambientOcclusion * ao);
    
 
     vec3 color = (shadowCol + multiplayer) * ambient + ((shadowCol + multiplayer) * Lo);
@@ -399,7 +398,9 @@ void runLight()
 
 void runDepth()
 {   
-    float z = texture(gPosition,TexCoords).b * 2.0 - 1.0; // Back to NDC 
+    vec3 position = texture(gPosition, TexCoords).rgb;
+    vec3 fragPos = vec3(view * vec4(position, 1.0));
+    float z = fragPos.z * 2.0 - 1.0; // Back to NDC 
 
     float liniar = (2.0 * depth_near * depth_far) / (depth_far + depth_near - z * (depth_far - depth_near));
     SaveDepth = vec3(liniar);

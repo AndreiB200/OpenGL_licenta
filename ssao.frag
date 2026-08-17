@@ -8,8 +8,10 @@ uniform sampler2D gNormal;
 uniform sampler2D texNoise;  
 
 uniform vec3 samples[64];
-uniform mat4 projection;
 uniform vec2 noiseScale;
+
+uniform mat4 projection;
+uniform mat4 view;
 
 const int kernelSize = 64;
 uniform float radius = 0.5;  
@@ -18,14 +20,17 @@ uniform float aoIntensity = 1.0;
 
 void main() {
     
-    vec3 fragPos = texture(gPosition, TexCoords).xyz;
-    vec3 normal  = normalize(texture(gNormal, TexCoords).xyz);
+    vec3 fragPosWorld = texture(gPosition, TexCoords).xyz;
+    vec3 normalWorld  = texture(gNormal, TexCoords).xyz;
     vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
 
-    if (length(fragPos) == 0.0) {
+    if (length(fragPosWorld) == 0.0) {
         FragColor = 1.0;
         return;
     }
+
+    vec3 fragPos = vec3(view * vec4(fragPosWorld, 1.0));
+    vec3 normal  = normalize(mat3(view) * normalWorld);
 
     vec3 tangent   = normalize(randomVec - normal * dot(randomVec, normal));
     vec3 bitangent = cross(normal, tangent);
@@ -41,7 +46,8 @@ void main() {
         offset.xy /= offset.w;                 
         offset.xy = offset.xy * 0.5 + 0.5;     
         
-        float sampleDepth = texture(gPosition, offset.xy).z;
+        vec3 sampleWorldPos = texture(gPosition, offset.xy).xyz;
+        float sampleDepth   = (view * vec4(sampleWorldPos, 1.0)).z;
         
         float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
         

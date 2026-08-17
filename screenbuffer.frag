@@ -14,6 +14,12 @@ uniform sampler2D metallicMap;
 uniform sampler2D normalMap;
 uniform sampler2D roughnessMap;
 
+uniform int textureSelect = 1;
+
+uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
+uniform float u_metallic = 0.1;
+uniform float u_roughness = 0.9;
+
 
 vec3 getNormalFromMap()
 {
@@ -35,12 +41,23 @@ vec3 getNormalFromMap()
 void main()
 {    
     gPosition = WorldPos;
-   
-    float roughness = texture(roughnessMap, TexCoords).r;
-    float metallic  = texture(metallicMap, TexCoords).r;
+    float roughness = 0.9;
+    float metallic = 0.0;
     
-    gAlbedo = texture(albedoMap, TexCoords).rgb;
-    gNormal = getNormalFromMap();
+    if(textureSelect == 0) // constants
+    {
+        gAlbedo = u_albedo;
+        gNormal = Normal;
+        gARM = vec3(roughness, metallic, 1.0);
+    }
+    if(textureSelect == 1) // textures
+    {
+        roughness = texture(roughnessMap, TexCoords).r;
+        metallic  = texture(metallicMap, TexCoords).r;
+    
+        gAlbedo = texture(albedoMap, TexCoords).rgb;
+        gNormal = getNormalFromMap();
         
-    gARM = vec3(roughness, metallic, 1.0);
+        gARM = vec3(roughness, metallic, 1.0);
+    }
 }
