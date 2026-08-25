@@ -589,17 +589,6 @@ public:
 
 	}
 
-	void getModelMatrix(JPH::BodyID bodyID, glm::vec3 &pos, glm::quat &quat)
-	{
-		JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
-		JPH::RVec3 position;
-		JPH::Quat rotation;
-		body_interface.GetPositionAndRotation(bodyID, position, rotation);
-
-		pos = glm::vec3(position.GetX(), position.GetY(), position.GetZ());
-		quat = glm::quat(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
-	}
-
 	void convertJPHtoGLM(JPH::BodyID body_id, glm::vec3 &position, glm::quat &quaternion)
 	{
 		JPH::RVec3 currentPos;
@@ -650,6 +639,17 @@ public:
 		JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
 		JPH::Vec3 joltLinearVel = body_interface.GetLinearVelocity(physics_id);
 		linearVelocity = glm::vec3(joltLinearVel.GetX(), joltLinearVel.GetY(), joltLinearVel.GetZ());
+	}
+
+	void getModelMatrix(JPH::BodyID bodyID, glm::vec3& pos, glm::quat& quat)
+	{
+		JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
+		JPH::RVec3 position;
+		JPH::Quat rotation;
+		body_interface.GetPositionAndRotation(bodyID, position, rotation);
+
+		pos = glm::vec3(position.GetX(), position.GetY(), position.GetZ());
+		quat = glm::quat(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
 	}
 
 	void resetBody(JPH::BodyID bodyID, const JPH::RVec3& startPosition, const JPH::Quat& startRotation) 
@@ -752,7 +752,7 @@ private:
 		JPH::RegisterTypes();
 	}
 	
-	const float physicsTimeStep = 1.0f / 480.0f;
+	const float physicsTimeStep = 1.0f / 400.0f;
 	
 	// System
 	JPH::PhysicsSystem physics_system;

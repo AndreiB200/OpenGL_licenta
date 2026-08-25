@@ -3,6 +3,15 @@
 
 #include <vector>
 
+struct droneCamera
+{
+    glm::vec3 position;
+    glm::vec3 worldPos;
+    glm::vec3 viewLook;
+    glm::mat4 projection;
+    glm::mat4 view;
+};
+
 class Drone
 {
 public:
@@ -11,12 +20,26 @@ public:
     Model* propeler;
     PrimitiveObj* primObj;
 
+    struct propellerData {
+        float MAX_FORCE, fortaM0, fortaM1, fortaM2, fortaM3;
+        glm::vec3 coltLocal0, coltLocal1, coltLocal2, coltLocal3; 
+        glm::quat quaternionDum;
+    };
+    
+    std::vector<droneCamera> cameras;
+    GLuint depthFBO;
+    GLuint depthTextures[3];
+    Shader shader = Shader("shadow.vert", "shadow.frag");
+    Shader debugging = Shader("shadow_debug.vert", "shadow_debug.frag");
+
     DebuggerClass* imgui_helper;
+
 
     struct SampledDepth {
         float ndcX;
         float ndcY;
         float value;
+        glm::vec3 position = glm::vec3(0.0f);
     };
     std::vector<SampledDepth> points, pointsPrevious;
     float middlePoint = 0.0f, previous_middlePoint = 0.0f;
@@ -85,7 +108,6 @@ public:
         dronePose.qx = drone->quaternion.x;
         dronePose.qy = drone->quaternion.y;
         dronePose.qz = drone->quaternion.z;
-        //dronePose.yaw = getYawFromQuaternion(drone->quaternion);
         std::cout << received_cmd.x << " " << received_cmd.y << " " << received_cmd.z << " "
             << received_cmd.qw << " " << received_cmd.qx << " " << received_cmd.qy << " " << received_cmd.qz << " " << received_cmd.flag << "\n";
     }
@@ -119,79 +141,198 @@ public:
         imgui_helper->droneTargetHeight = targetHeight;
     }
 
-    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 linearVelocity, glm::vec3 &targetCollision, float &collisionYaw)
+    void createCamera(int WIDTH, int HEIGHT)
     {
-        goTo_X = +positioning_X + received_cmd.x;
-        goTo_Z = +positioning_Z + received_cmd.z;
+        // Main front camera index [0]
+        droneCamera droneFrontCamera;
+        droneFrontCamera.position = imgui_helper->cameraLocation;
+        droneFrontCamera.viewLook = imgui_helper->lookingCamera;
 
-        glm::quat normQuat = glm::normalize(currentQuat);
-        glm::vec3 forward = glm::rotate(normQuat, glm::vec3(0.0f, 0.0f, 1.0f));
-        glm::vec3 forwardXZ = glm::vec3(forward.x, 0.0f, forward.z);
-        glm::vec3 left_right = glm::normalize(glm::vec3(glm::cross(forwardXZ, glm::vec3(0.0f, 1.0f, 0.0f))));
+        glm::vec3 dronePosition = drone->position;
+        glm::quat droneQuaternion = drone->quaternion;
 
-        float forwardPos = positioning_X;
-        float rightPos = positioning_Z;
+        glm::vec3 rotateOffset = droneQuaternion * droneFrontCamera.position;
+        glm::vec3 cameraWorldPosition = dronePosition + rotateOffset;
+        glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
 
-        glm::vec3 moveDirection = (forwardXZ * forwardPos) + (left_right * rightPos);
+        droneFrontCamera.view = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * droneFrontCamera.viewLook), cameraUp);
+        droneFrontCamera.projection = glm::perspective(glm::radians(90.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
-        // movement based on position
-        float saveY = targetCollision.y;
-        targetCollision = currentPos + (moveDirection * 10.0f);
-        targetCollision.y = saveY;
-
-        // continuous depth and proximity check for turning from Yaw
-        float extractYaw, dummycheck;
-        calculateAvoidanceVector(dummycheck, extractYaw);
-        collisionYaw = collisionYaw + (extractYaw * imgui_helper->SENSITIVITY);
-
-        static float receivedIncreasingYaw = 0.0f;
-        if (imgui_helper->remoteControl && received_cmd.flag == 1)
-        {
-            receivedIncreasingYaw = receivedIncreasingYaw + received_cmd.qy;
-        }
-        
-        
-        collisionYaw = collisionYaw + receivedIncreasingYaw;
-
-        imgui_helper->outputRoll = collisionYaw;
-
-        // collision detection
-        float distanceToObstacle = middlePoint * 25.0f;
-        bool isCollidingNow = (distanceToObstacle < -1.0f); // CHANGE ITTT !!!!!!
-        if (isCollidingNow)
-        {
-            targetCollision = currentPos + (moveDirection * 5.0f); // slow down, integrate movement yaw
-            imgui_helper->collision = true;
-        }
-        else
-        {
-            imgui_helper->collision = false;
-        }
-
-
-        imgui_helper->targetCollision = targetCollision;
-        imgui_helper->outputPitch = pitchInput_X;
-
+        cameras.push_back(droneFrontCamera);
     }
 
-    void depthProc(std::vector<unsigned char> &depthProc)
+    void sensorsAttach(int WIDTH, int HEIGHT)
     {
-        get36UniformNDCPoints(depthProc);
+        // Front Back Left Right order (in vector)
+        glm::vec3 sensorLocalOffset = glm::vec3(0.0f, 0.7f, 1.0f);
+        glm::mat4 projDrone = glm::perspective(glm::radians(90.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
+        
+        glm::vec3 sensorLookBACK = glm::vec3(0.0f, 0.7f, -2.0f);
+        glm::vec3 sensorLookLEFT = glm::vec3(2.0f, 0.7f, 0.0f);
+        glm::vec3 sensorLookRIGHT = glm::vec3(-2.0f, 0.7f, 0.0f);
+
+        glm::vec3 dronePosition = drone->position;
+        glm::quat droneQuaternion = drone->quaternion;
+        glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
+        
+        droneCamera droneBackCamera, droneLeftCamera, droneRightCamera;
+        droneBackCamera.position = droneLeftCamera.position = droneRightCamera.position = imgui_helper->cameraLocation;
+        droneBackCamera.viewLook = sensorLookBACK; droneLeftCamera.viewLook = sensorLookLEFT; droneRightCamera.viewLook = sensorLookRIGHT;
+
+        glm::vec3 rotateOffset = droneQuaternion * droneBackCamera.position;
+        glm::vec3 cameraWorldPosition = dronePosition + rotateOffset;
+
+        droneBackCamera.view = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * droneBackCamera.viewLook), cameraUp);
+        droneLeftCamera.view = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * droneLeftCamera.viewLook), cameraUp);
+        droneRightCamera.view = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * droneRightCamera.viewLook), cameraUp);
+
+        droneBackCamera.projection = droneLeftCamera.projection = droneRightCamera.projection = glm::perspective(glm::radians(90.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
+        cameras.push_back(droneBackCamera); cameras.push_back(droneLeftCamera); cameras.push_back(droneRightCamera);
+
+        GLuint depthRBO;
+        glGenRenderbuffers(1, &depthRBO);
+        glBindRenderbuffer(GL_RENDERBUFFER, depthRBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, WIDTH, HEIGHT);
+
+        glGenFramebuffers(1, &depthFBO);
+        glGenTextures(3, depthTextures);
+
+        for (int i = 0; i < 3; i++) {
+            glBindTexture(GL_TEXTURE_2D, depthTextures[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, WIDTH, HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+            float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTextures[0], 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
-    void get36UniformNDCPoints(std::vector<unsigned char>& depthData) {
+
+    void saveSceneSensorData(std::vector<Model*> models, glm::mat4 cameraSpaceMatrix, int map_index)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTextures[map_index], 0);
+
+        glViewport(0, 0, 1280, 720);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        glDisable(GL_CULL_FACE);
+
+        shader.use();
+        shader.setMat4("lightSpaceMatrix", cameraSpaceMatrix);
+
+        for (int i = 0; i < models.size(); i++) {
+            models[i]->drawShadow(shader);
+        }
+
+        // Unbind FBO
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void drawSensorData()
+    {
+        glDisable(GL_DEPTH_TEST);
+        debugging.use();
+        debugging.setFloat("near_plane", 0.1);
+        debugging.setFloat("far_plane", 100.0);
+
+        int WIDTH = 1280, HEIGHT = 720;
+
+        debugging.setInt("depthMap", 0);
+        glActiveTexture(GL_TEXTURE0);
+        
+        glViewport(WIDTH / 2, HEIGHT / 2, WIDTH / 2, HEIGHT / 2);
+        glBindTexture(GL_TEXTURE_2D, depthTextures[0]);
+        renderQuad();
+
+        glViewport(0, 0, WIDTH / 2, HEIGHT / 2);
+        glBindTexture(GL_TEXTURE_2D, depthTextures[1]);
+        renderQuad();
+
+        glViewport(WIDTH / 2, 0, WIDTH / 2, HEIGHT / 2);
+        glBindTexture(GL_TEXTURE_2D, depthTextures[2]);
+        renderQuad();
+    }
+
+    void cameraAnimation(std::vector<Model*> models, glm::mat4 &proj, glm::mat4 &view, glm::vec3 &camPos)
+    {
+        for (int i = 0; i < cameras.size(); i++)
+        {
+            glm::vec3 cameraLocalOffset = imgui_helper->camPosition[i];
+            glm::vec3 lookAtDrone = imgui_helper->lookingPosition[i];
+
+            glm::vec3 dronePosition = drone->position;
+            glm::quat droneQuaternion = drone->quaternion;
+
+            glm::vec3 rotateOffset = droneQuaternion * cameraLocalOffset;
+            glm::vec3 cameraWorldPosition = dronePosition + rotateOffset;
+            glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::mat4 viewMatrix = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * lookAtDrone), cameraUp);
+            glm::mat4 projDrone = cameras[i].projection;
+            cameras[i].view = viewMatrix;
+            cameras[i].worldPos = cameraWorldPosition;
+            glm::mat4 spaceMatrix = projDrone * viewMatrix;
+            if(i > 0)
+                saveSceneSensorData(models, spaceMatrix, i-1);
+        }
+
+        camPos = cameras[0].worldPos;
+        proj = cameras[0].projection;
+        view = cameras[0].view;
+    }
+
+    void drawCubesFromPoints(Shader &localShader)
+    {
+        glm::mat4 invProj = glm::inverse(cameras[0].projection);
+        glm::mat4 invView = glm::inverse(cameras[0].view);
+
+        for (size_t i = 0; i < points.size(); ++i) {
+            float zView = points[i].value * imgui_helper->depth_far;
+            glm::vec4 clipPos = glm::vec4(points[i].ndcX, points[i].ndcY, 1.0f, 1.0f);
+            glm::vec4 viewTarget = invProj * clipPos;
+            viewTarget /= viewTarget.w;
+
+            glm::vec3 rayDir = glm::normalize(glm::vec3(viewTarget));
+
+            glm::vec3 viewPos = rayDir * (zView / -rayDir.z);
+
+            glm::vec3 worldPos = glm::vec3(invView * glm::vec4(viewPos, 1.0f));
+            points[i].position = worldPos;
+
+            primObj->move(worldPos);
+            primObj->scale(imgui_helper->cubeSizes);
+            primObj->rotate_Q(drone->quaternion);
+            localShader.setVec3("debugColor", glm::vec3(0.0f, 1.0f - points[i].value, 0.0f));
+            primObj->renderCube_shader(localShader);
+        }
+    }
+
+    void depthProc(std::vector<float> &depthProc)
+    {
+        getUniformNDCPoints(depthProc);
+    }
+    void getUniformNDCPoints(std::vector<float>& depthData) 
+    {
         const int width = 1280;
         const int height = 720;
-        const int count = 8;
+        const int count = 12; 
 
-        if (points.size() != 64) {
-            points.resize(64);
-        }
+        if (points.size() != count*count) points.resize(count * count);
+        if (pointsPrevious.size() != count * count) pointsPrevious.resize(count * count);
 
-        if (pointsPrevious.size() != 64) {
-            pointsPrevious.resize(64);
-        }
+        if (depthData.size() < static_cast<size_t>(width * height)) return;
 
-        middlePoint = depthData[(360 * 1280 + 640) * 4] / 255.0f;
+        middlePoint = depthData[360 * width + 640];
 
         static bool isInitialized = false;
         bool firstFrame = !isInitialized;
@@ -202,94 +343,62 @@ public:
         const float stepY = static_cast<float>(height) / (count + 1);
 
         int pointIndex = 0;
+        std::vector<float> neighborhood(9);
 
-        std::vector<unsigned char> neighborhood(25);
+        for (int r = 1; r <= count; ++r) {
+            int y = std::clamp(static_cast<int>(r * stepY), 0, height - 1);
 
-        for (int r = 1; r <= count; ++r)
-        {
-            int y = static_cast<int>(r * stepY);
-            if (y >= height) y = height - 1;
+            for (int c = 1; c <= count; ++c) {
+                int x = std::clamp(static_cast<int>(c * stepX), 0, width - 1);
 
-            for (int c = 1; c <= count; ++c)
-            {
-                int x = static_cast<int>(c * stepX);
-                if (x >= width) x = width - 1;
+                size_t idx = static_cast<size_t>(y) * width + x;
+                float medianDepthValue = depthData[idx];
 
-                size_t index = (static_cast<size_t>(y) * width + x) * 4;
+                float ndcX = ((static_cast<float>(x) + 0.5f) / static_cast<float>(width)) * 2.0f - 1.0f;
+                float ndcY = ((static_cast<float>(y) + 0.5f) / static_cast<float>(height)) * 2.0f - 1.0f;
 
-                if (index + 3 < depthData.size()) {
+                float finalDepth = medianDepthValue;
 
-                    // --- MEDIANA 3x3 ---
-                    int countValid = 0;
-                    for (int dy = -2; dy <= 2; ++dy) {
-                        int py = std::clamp(y + dy, 0, height - 1);
-                        for (int dx = -2; dx <= 2; ++dx) {
-                            int px = std::clamp(x + dx, 0, width - 1);
-                            size_t nIdx = (static_cast<size_t>(py) * width + px) * 4;
-                            neighborhood[countValid++] = depthData[nIdx];
-                        }
-                    }
-
-                    // std::nth_element găsește mediana în O(N) fără să sorteze tot vectorul
-                    std::nth_element(neighborhood.begin(), neighborhood.begin() + 4, neighborhood.end());
-                    unsigned char medianRawValue = neighborhood[4]; // Valoarea mediană din ferestra 3x3
-
-                    // --- CONVERSIE NDC & ADÂNCIME ---
-                    float ndcX = (static_cast<float>(x) / (width - 1)) * 2.0f - 1.0f;
-                    float ndcY = (static_cast<float>(y) / (height - 1)) * 2.0f - 1.0f;
-                    float depthVal = medianRawValue / 255.0f;
-                    float finalDepth = depthVal;
-
-                    if (!firstFrame) {
-                        float prevDepth = pointsPrevious[pointIndex].value;
-                        finalDepth = applyAdaptiveFilter(depthVal, prevDepth);
-                    }
-
-                    // Salvăm punctul filtrat
-                    points[pointIndex++] = { ndcX, ndcY, finalDepth };
-
-                    // --- MARCARE VIZUALĂ A ZONEI (Debug Grid) ---
-                    for (int dy = -4; dy < 4; ++dy) {
-                        int py = y + dy;
-                        if (py < 0 || py >= height) continue;
-
-                        for (int dx = -4; dx < 4; ++dx) {
-                            int px = x + dx;
-                            if (px < 0 || px >= width) continue;
-
-                            size_t pIndex = (static_cast<size_t>(py) * width + px) * 4;
-                            depthData[pIndex + 2] = 255; // Marcare pe canalul Albastru (dacă e RGBA)
-                        }
-                    }
+                if (!firstFrame) {
+                    float prevDepth = pointsPrevious[pointIndex].value;
                 }
+
+                points[pointIndex++] = { ndcX, ndcY, finalDepth };
             }
         }
 
-        isInitialized = true; // După primul cadru rulat complet, trecem pe false
+        isInitialized = true;
     }
-
-    void calculateAvoidanceVector(float& pitch, float& roll) 
-    {
+    
+    bool calculateAvoidanceVector(float& pitch, float& roll, float& DISTANCE_THRESHOLD) {
         static float lastPitch = 0.0f;
         static float lastRoll = 0.0f;
+
         float totalPitchRepulsion = 0.0f;
         float totalRollRepulsion = 0.0f;
         float totalWeight = 0.0f;
 
-        for (int i = 0; i < points.size(); i++) 
+        bool objectToClose = false, firstCollisionCheck = false;
+
+        for (size_t i = 0; i < points.size(); i++)
         {
-            float speedDifference = pointsPrevious[i].value - points[i].value; //difference between first and second frame depth for checking ~speed increase
-            if (std::abs(speedDifference) < 0.004f) { // ignoră fluctuația de exact 1 LSB (1/255)
-                speedDifference = 0.0f;
-            }
-            float depthWeight = points[i].value - (1.0f * speedDifference);
+            float proximity = glm::clamp(1.0f - points[i].value * 1.5f, 0.0f, 1.0f);
+
             float spatialWeight = getCenterWeight(points[i].ndcX, points[i].ndcY);
-            float combinedWeight = depthWeight * 1.5 * spatialWeight;
 
-            totalRollRepulsion += -points[i].ndcX * depthWeight;
-            totalPitchRepulsion += -points[i].ndcY * depthWeight;
+            float weight = proximity;
 
-            totalWeight += combinedWeight;
+            totalRollRepulsion += points[i].ndcX * weight;
+            totalPitchRepulsion += points[i].ndcY * weight;
+
+            totalWeight += weight;
+
+            float distanceToObstacle = points[i].value * 100.0f;
+            if (distanceToObstacle < DISTANCE_THRESHOLD && firstCollisionCheck == false)
+            {
+                objectToClose = true;
+                firstCollisionCheck = true;
+            }
         }
 
         if (totalWeight > 0.0001f) {
@@ -300,21 +409,100 @@ public:
             roll = 0.0f;
             pitch = 0.0f;
         }
-        roll = applyAdaptiveFilter(roll, lastRoll);
-        pitch = applyAdaptiveFilter(pitch, lastPitch);
-        middlePoint = applyAdaptiveFilter(middlePoint, previous_middlePoint);
+
         lastRoll = roll;
         lastPitch = pitch;
         previous_middlePoint = middlePoint;
 
+        
         MIN_ALPHA = imgui_helper->MIN_ALPHA;
         MAX_ALPHA = imgui_helper->MAX_ALPHA;
         NOISE_THRESHOLD = imgui_helper->NOISE_THRESHOLD;
         JUMP_THRESHOLD = imgui_helper->JUMP_THRESHOLD;
+
+        return objectToClose;
     }
+    
+    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 angularVel, glm::vec3 &targetCollision, float &collisionYaw)
+    {
+        goTo_X = +positioning_X + received_cmd.x;
+        goTo_Z = +positioning_Z + received_cmd.z;
+
+        // Gamepad direction
+        float forwardPos = positioning_X; 
+        float rightPos = positioning_Z;
+        
+        // Speed | distance | collisions
+        float MAX_SPEED = 7.0f;
+        float DISTANCE_THRESHOLD = 4.0f;
+        float actualSpeed = glm::length(angularVel);     imgui_helper->angularVel = glm::length(angularVel);
+        float extractYaw, extractHeight;
+        float distanceToObstacle = middlePoint * 100.0f;    imgui_helper->middlePointDebug = distanceToObstacle; // debug
+
+        // Max speeds and distance
+        bool isCollidingNow = calculateAvoidanceVector(extractHeight, extractYaw, DISTANCE_THRESHOLD);
+        float preventiveSpeed = 1.0f, minimumSpeed = std::abs(MAX_SPEED - std::abs(MAX_SPEED * extractYaw));
+        
+
+        // Direction crusing
+        glm::vec3 forward = glm::rotate(glm::normalize(currentQuat), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::vec3 forwardXZ = glm::vec3(forward.x, 0.0f, forward.z);
+        glm::vec3 left_right = glm::normalize(glm::vec3(glm::cross(forwardXZ, glm::vec3(0.0f, 1.0f, 0.0f))));
+
+        // continuous depth and proximity check for turning
+        // YAW
+        static float collisionRoll = 0.0f, smoothYawRot = 0.0f;
+        if (std::abs(extractYaw) < 0.05f || std::abs(extractYaw) > 0.5f)
+            extractYaw = 0.0f;
+        actualSpeed = glm::clamp(actualSpeed, 0.0f, 0.8f);
+        smoothYawRot = glm::mix(smoothYawRot, smoothYawRot + (extractYaw * actualSpeed * imgui_helper->SENSITIVITY), 0.015f);
+        collisionYaw = collisionYaw + smoothYawRot;        
+        // ROLL
+        collisionRoll = glm::mix(collisionRoll, -extractYaw * imgui_helper->SENSITIVITY_roll, 0.1f);
+        preventiveSpeed = MAX_SPEED - std::abs(extractYaw * imgui_helper->SENSITIVITY);
+
+        // Check for a collision
+        static float receivedIncreasingYaw = 0.0f;
+        if (imgui_helper->remoteControl && received_cmd.flag == 1)
+        {
+            receivedIncreasingYaw = receivedIncreasingYaw + received_cmd.qy;
+            collisionYaw = collisionYaw + receivedIncreasingYaw;
+        }
+
+        // collision detection
+        glm::vec3 moveDirection;
+        float targetSpeed = preventiveSpeed;
+        if (isCollidingNow)
+        {
+            // reverse backwards after collision
+            float dangerFactor = glm::clamp((DISTANCE_THRESHOLD - distanceToObstacle) / MAX_SPEED, 0.0f, 1.0f);
+            targetSpeed = 3.0f * (1.0f - dangerFactor * 5.0f);
+
+            imgui_helper->outputHeight = extractHeight;
+
+            imgui_helper->collision = true;
+        }
+        else
+        {
+            imgui_helper->collision = false;
+        }
+
+        static float smoothSpeed = 0.0f;
+        smoothSpeed = glm::mix(smoothSpeed, targetSpeed, 0.01f);
+        moveDirection = (forwardXZ * smoothSpeed * forwardPos) + (left_right * (collisionRoll + rightPos));
+        
+        float saveY = targetCollision.y;
+        targetCollision = currentPos + moveDirection; 
+        targetCollision.y = saveY;
+
+        imgui_helper->outputYaw = extractYaw;
+        imgui_helper->targetCollision = targetCollision;
+    }
+
 
     glm::vec3 targetPosition;
     float targetYawAngle;
+    propellerData propellers;
     void flyDrone(Shader pbrShader)
 	{
         bool inteligenta_artificiala = imgui_helper->inteligenta_artificiala;
@@ -352,6 +540,8 @@ public:
         glm::quat currentQuat;
         glm::vec3 currentAngVel, worldLinearVel;
         PhysicsEngine::getInstance().getModelMatrix(drone->physics_id, currentPosition, currentQuat);
+        drone->position = currentPosition; drone->quaternion = currentQuat;
+
         PhysicsEngine::getInstance().GetAngularVelocity(drone->physics_id, currentAngVel);
         PhysicsEngine::getInstance().GetLinearVelocity(drone->physics_id, worldLinearVel);
         glm::vec3 localAngVel = glm::inverse(currentQuat) * currentAngVel;
@@ -361,7 +551,7 @@ public:
         float dt = PhysicsEngine::getInstance().getPhysicsStep();
 
         targetPosition = glm::vec3(imgui_helper->targetPosition.x, targetHeight, imgui_helper->targetPosition.z);
-        collisionDetection(currentPosition, currentQuat, worldLinearVel, targetPosition, targetYawAngle);
+        collisionDetection(currentPosition, currentQuat, currentAngVel, targetPosition, targetYawAngle);
         //processAiNetwork(targetPosition, targetYawAngle);
 
         
@@ -370,6 +560,7 @@ public:
             imgui_helper->inteligenta_artificiala = true;
         }
 
+        bool userAcceptAi = imgui_helper->userAcceptAi;
 
         float heightError;
         heightError = targetPosition.y - currentPosition.y;
@@ -390,7 +581,7 @@ public:
         glm::vec3 convert;
 
         float targetYaw = 0.0f;
-        if (inteligenta_artificiala) {
+        if (inteligenta_artificiala && userAcceptAi) {
             float errorX = targetPosition.x - currentPosition.x;
             float errorZ = targetPosition.z - currentPosition.z;
 
@@ -451,10 +642,44 @@ public:
         PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal1, directieRacheta, fortaM3, 1.0f);  // Back Left
         PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal3, directieRacheta, fortaM1, -1.0f); // Back Right
 
-        renderPropellers(pbrShader, MAX_FORCE, fortaM0, fortaM1, fortaM2, fortaM3, coltLocal0, coltLocal1, coltLocal2, coltLocal3, targetQuat);
+        savePropellers(MAX_FORCE, fortaM0, fortaM1, fortaM2, fortaM3, coltLocal0, coltLocal1, coltLocal2, coltLocal3, targetQuat);
 
         PhysicsEngine::getInstance().run();
 	}
+
+    void renderPropellers(Shader& shader)
+    {
+        propeler->move(propellers.coltLocal0); // M0
+        propeler->rotate_Q(drone->quaternion);
+        propeler->scale(0.5);
+        shader.setVec3("debugColor", glm::vec3(propellers.fortaM0 / propellers.MAX_FORCE, 0.0f, 0.0f));
+        propeler->draw(shader);
+
+        propeler->move(propellers.coltLocal1); // M3
+        propeler->rotate_Q(drone->quaternion);
+        propeler->scale(0.5f);
+        shader.setVec3("debugColor", glm::vec3(0.0f, propellers.fortaM3 / propellers.MAX_FORCE, 0.0f));
+        propeler->draw(shader);
+
+        propeler->move(propellers.coltLocal2); // M2 
+        propeler->rotate_Q(drone->quaternion);
+        propeler->scale(0.5f);
+        shader.setVec3("debugColor", glm::vec3(0.0f, 0.0f, propellers.fortaM2 / propellers.MAX_FORCE));
+        propeler->draw(shader);
+
+        propeler->move(propellers.coltLocal3); // M1 
+        propeler->rotate_Q(drone->quaternion);
+        propeler->scale(0.5f);
+        shader.setVec3("debugColor", glm::vec3(propellers.fortaM1 / propellers.MAX_FORCE, propellers.fortaM1 / propellers.MAX_FORCE, 0.0f));
+        propeler->draw(shader);
+
+        primObj->move(glm::vec3(2.0f, 2.0f, -1.0f));
+        primObj->rotate_Q(propellers.quaternionDum);
+        propeler->scale(1.0f);
+        primObj->renderCube_shader(shader);
+
+        imgui_helper->quatDebug = drone->quaternion;
+    }
 
     void processAiNetwork(glm::vec3 &targetPosition, float &targetYaw)
     {
@@ -508,50 +733,41 @@ private:
         return glm::exp(-a * glm::pow(glm::abs(x), b));
     }
 
-    void renderPropellers(Shader& pbrShader, float &MAX_FORCE,float &fortaM0, float &fortaM1, float &fortaM2, float &fortaM3, glm::vec3 coltLocal0, glm::vec3 coltLocal1, glm::vec3 coltLocal2, glm::vec3 coltLocal3, glm::quat quaternionDum)
+    void savePropellers(float& MAX_FORCE, float& fortaM0, float& fortaM1, float& fortaM2, float& fortaM3, glm::vec3 coltLocal0, glm::vec3 coltLocal1, glm::vec3 coltLocal2, glm::vec3 coltLocal3, glm::quat quaternionDum)
     {
-        propeler->move(coltLocal0); // M0
-        propeler->rotate_Q(drone->quaternion);
-        propeler->scale(0.5);
-        pbrShader.setVec3("u_albedo", glm::vec3(fortaM0 / MAX_FORCE, 0.0f, 0.0f));
-        propeler->draw(pbrShader);
-
-        propeler->move(coltLocal1); // M3
-        propeler->rotate_Q(drone->quaternion);
-        propeler->scale(0.5f);
-        pbrShader.setVec3("u_albedo", glm::vec3(0.0f, fortaM3 / MAX_FORCE, 0.0f));
-        propeler->draw(pbrShader);
-
-        propeler->move(coltLocal2); // M2 
-        propeler->rotate_Q(drone->quaternion);
-        propeler->scale(0.5f);
-        pbrShader.setVec3("u_albedo", glm::vec3(0.0f, 0.0f, fortaM2 / MAX_FORCE));
-        propeler->draw(pbrShader);
-
-        propeler->move(coltLocal3); // M1 
-        propeler->rotate_Q(drone->quaternion);
-        propeler->scale(0.5f);
-        pbrShader.setVec3("u_albedo", glm::vec3(fortaM1 / MAX_FORCE, fortaM1 / MAX_FORCE, 0.0f));
-        propeler->draw(pbrShader);
-
-        primObj->move(glm::vec3(2.0f, 2.0f, -1.0f));
-        primObj->rotate_Q(quaternionDum);
-        primObj->renderCube_shader(pbrShader);
-
-        imgui_helper->quatDebug = drone->quaternion;
+        propellers.MAX_FORCE = MAX_FORCE;
+        propellers.fortaM0 = fortaM0; propellers.fortaM1 = fortaM1; propellers.fortaM2 = fortaM2; propellers.fortaM3 = fortaM3;
+        propellers.coltLocal0 = coltLocal0; propellers.coltLocal1 = coltLocal1; propellers.coltLocal2 = coltLocal2; propellers.coltLocal3 = coltLocal3;
+        propellers.quaternionDum = quaternionDum;
     }
 
-    float getYawFromQuaternion(const glm::quat& q) {
-        glm::vec3 forwardBase = glm::vec3(0.0f, 0.0f, 1.0f);
-        glm::vec3 dir = q * forwardBase;
-
-        float yawRad = std::atan2(dir.x, -dir.z);
-        float yawDeg = glm::degrees(yawRad);
-
-        if (yawDeg < 0.0f) {
-            yawDeg += 360.0f;
+    unsigned int quadVAO = 0;
+    unsigned int quadVBO;
+    void renderQuad()
+    {
+        if (quadVAO == 0)
+        {
+            float quadVertices[] = {
+                // positions        // texture Coords
+                -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+                -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+                 1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+                 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+            };
+            // setup plane VAO
+            glGenVertexArrays(1, &quadVAO);
+            glGenBuffers(1, &quadVBO);
+            glBindVertexArray(quadVAO);
+            glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
         }
-        return yawDeg;
+        glBindVertexArray(quadVAO);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(0);
     }
 };
 

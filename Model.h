@@ -83,10 +83,10 @@ public:
             else
             {
                 resetMatrix();
-                PhysicsEngine::getInstance().getModelMatrix(physics_id, position, quaternion);
                 move(position);
                 rotate_Q(quaternion);
                 scale(size);
+                PhysicsEngine::getInstance().getModelMatrix(physics_id, position, quaternion);
             }
 
             shader.setMat4("model", model);

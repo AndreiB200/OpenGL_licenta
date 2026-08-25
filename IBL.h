@@ -441,9 +441,12 @@ public:
 		backgroundShader.setInt("environmentMap", 0);
 		backgroundShader.setMat4("view", view);
 		backgroundShader.setMat4("projection", projection);
+		
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, envCubeMap);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+		glDisable(GL_CULL_FACE);
 		renderCube();
+		glEnable(GL_CULL_FACE);
 	}
 };
 

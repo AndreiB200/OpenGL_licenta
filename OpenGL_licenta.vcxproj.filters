@@ -76,6 +76,9 @@
     <Filter Include="Shaders\PBR\SSAO">
       <UniqueIdentifier>{163d17a0-a354-4f8f-94ce-b68af524262c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Debugging\debug_shader">
+      <UniqueIdentifier>{a367f8f9-9d44-4f2d-9f0f-581f6dc00c4c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad.c">
@@ -322,6 +325,12 @@
     </None>
     <None Include="screenbuffer.frag">
       <Filter>Shaders\PBR</Filter>
+    </None>
+    <None Include="debug_shader.vert">
+      <Filter>Shaders\Debugging\debug_shader</Filter>
+    </None>
+    <None Include="debug_shader.frag">
+      <Filter>Shaders\Debugging\debug_shader</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

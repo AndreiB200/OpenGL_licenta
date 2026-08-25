@@ -10,6 +10,8 @@ class DebuggerClass
 public:
 	DebuggerClass(){}
 
+    Shader noColorDebugShader = Shader("debug_shader.vert", "debug_shader.frag");
+
 	bool secvential = false;
 
 	//textures edit
@@ -31,7 +33,7 @@ public:
     glm::vec3 *lightPositions;
 
     std::vector<Model*> models;
-    Model *newModel;
+    Model* newModel;
 
 	void initImgui(Window myWindow)
 	{
@@ -64,6 +66,24 @@ public:
         newModel = &model;
     }
 
+    void drawDebuggingState(GLuint gBufferFBO, int WIDTH, int HEIGHT, glm::mat4 &projection, glm::mat4 &view)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, gBufferFBO);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+        glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glDisable(GL_DEPTH_TEST);        
+        glDepthMask(GL_TRUE);
+        noColorDebugShader.use();
+        noColorDebugShader.setMat4("projection", projection);
+        noColorDebugShader.setMat4("view", view);
+    }
+
     // Drone checks
     std::string droneInfo = "";
 
@@ -71,27 +91,45 @@ public:
     glm::vec3 currentPos;
     glm::vec3 quatDummyTest;
     bool startMotors = true;
-    glm::vec3 cameraLocation = glm::vec3(0.0f, -0.3f, 0.0f);
-    glm::vec3 lookingCamera = glm::vec3(0.0f, -0.5f, 2.0f);
+    glm::vec3 cameraLocation = glm::vec3(0.0f, 0.7f, 1.1f);
+    glm::vec3 lookingCamera = glm::vec3(0.0f, 0.7f, 2.0f);
     float getMaxPower()
     {
         return maxPower;
     }
+
     // States
     bool droneCamera = false;
     bool gamepadState = false;
     bool physicsDebugRender = true;
+    int sensorID = 0;
+
+
+    std::vector<glm::vec3> camPosition = {
+        glm::vec3(0.0f, 0.7f, 1.0f), // front
+        glm::vec3(0.0f, 0.7f, -0.8f), // back
+        glm::vec3(0.9f, 0.7f, 0.0f), // left
+        glm::vec3(-0.9f, 0.7f, 0.0f) // right
+    }; 
+    std::vector<glm::vec3> lookingPosition = {
+        glm::vec3(0.0f, 0.7f, 2.0f), // front
+        glm::vec3(0.0f, 0.7f, -2.0f), // back
+        glm::vec3(2.0f, 0.8f, 0.0f), // left
+        glm::vec3(-2.0f, 0.8f, 0.0f) // right
+    };
+
 
     //SSR values
-    int uMaxSteps = 60;
+    int uMaxSteps = 600;
     int uBinarySearchSteps = 8;
     float uStepSize = 0.1;
     float uThickness = 0.2;
 
     //SSAO values
-    float aoMultiplayer = 1.0f;
+    float aoMultiplayer = 5.0f;
     float aoRadius = 0.5f;
     float aoBias = 0.025f;
+    float lightWidth = 4000.0f;
 
     // Drone target and power
     float droneTargetHeight = 0.0f;
@@ -99,18 +137,22 @@ public:
     float minPower = 0.0f;
     
     // Drone values for vision
-    float rollValue = 0.0f, pitchValue = 0.0f, middlePointDebug = 0.0f, outputRoll = 0.0f, outputPitch = 0.0f;
+    float rollValue = 0.0f, pitchValue = 0.0f, middlePointDebug = 0.0f, outputYaw = 0.0f, outputHeight = 0.0f;
     
     // Filter variables
-    float MIN_ALPHA = 0.1f, MAX_ALPHA = 1.0f, NOISE_THRESHOLD = 0.004f, JUMP_THRESHOLD = 0.003f;
+    float MIN_ALPHA = 0.8f, MAX_ALPHA = 1.0f, NOISE_THRESHOLD = 0.001f, JUMP_THRESHOLD = 0.001f;
     float SENSITIVITY = 2.0f;
+    float SENSITIVITY_roll = 1.0f;
 
     // Ai variables
     bool inteligenta_artificiala = false;
     glm::vec3 targetPosition = glm::vec3(0.0f, 2.0f, 0.0f);
     bool collision = false;
     bool remoteControl = false;
-    float depth_near = 0.001f, depth_far = 1000.0f;
+    bool userAcceptAi = false;
+    float depth_near = 0.001f, depth_far = 100.0f;
+    float cubeSizes = 0.03;
+    float angularVel = 0.0f;
     
     // Propeller positions
     glm::vec3 posPropeller_FRONTLEFT = glm::vec3(1.88f, -0.35f, 1.62f);
@@ -121,17 +163,19 @@ public:
     glm::vec3 targetCollision = glm::vec3(0.0f);
     glm::vec3 forwardDir = glm::vec3(0.0f);
 
-    float lightWidth = 0.05f;
+    glm::vec3 cameraDebugPos = glm::vec3(0.0f);
 
 	void setSlides()
 	{
         Imgui_layer::getInstance().addWidget(new Value("deltaTime:", deltaTime));
         Imgui_layer::getInstance().addWidget(new Value("FPS:", fps));
+
         Imgui_layer::getInstance().addWidget(new CheckBox("Gamepad connected", &gamepadState));
         Imgui_layer::getInstance().addWidget(new CheckBox("Remote controll Ai", &remoteControl));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Accept Ai ?", &userAcceptAi));
         Imgui_layer::getInstance().addWidget(new CheckBox("Debug Physics collisions", &physicsDebugRender));
 
-        Imgui_layer::getInstance().addWidget(new InputInt("SSR uMaxSteps", &uMaxSteps, 0, 600));
+        Imgui_layer::getInstance().addWidget(new InputInt("SSR uMaxSteps", &uMaxSteps, 0, 1200));
         Imgui_layer::getInstance().addWidget(new InputInt("SSR uBinarySearchSteps", &uBinarySearchSteps, 0, 80));
         Imgui_layer::getInstance().addWidget(new DragFloat("SSR uStepSize", &uStepSize, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragFloat("SSR uThickness", &uThickness, 0.1f));
@@ -139,6 +183,11 @@ public:
         Imgui_layer::getInstance().addWidget(new DragFloat("SSAO radius", &aoRadius, 0.05f));
         Imgui_layer::getInstance().addWidget(new DragFloat("SSAO bias", &aoBias, 0.05f));
         Imgui_layer::getInstance().addWidget(new DragFloat("Light Width", &lightWidth, 0.05f));
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Down Camera Pos, Look"));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&camPosition[1], 0.01f));
+        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&lookingPosition[1], 0.01f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("Cube Sizes", &cubeSizes, 0.001f));
 
 
         
@@ -154,13 +203,14 @@ public:
         Imgui_layer::getInstance().addWidget(new Value(" X:", &currentPos.x)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Y:", &currentPos.y)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &currentPos.z));
-        Imgui_layer::getInstance().addWidget(new DragFloat("depth_near", &depth_near, 0.1f));
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("DEBUG Camera Position"));
+        positionSlide("Camera", cameraDebugPos);
+        Imgui_layer::getInstance().addWidget(new DragFloat("depth_near", &depth_near, 0.01f));
         Imgui_layer::getInstance().addWidget(new DragFloat("depth_far", &depth_far, 0.1f));
 
         positionSlide("target", targetCollision);
         Imgui_layer::getInstance().addWidget(new CheckBox("Collision detected?", &collision));
         positionSlide("directie de mers", forwardDir);
-
 
         // PID values
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
@@ -190,39 +240,38 @@ public:
         Imgui_layer::getInstance().addWidget(new ImGUI_text("Target position"));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(&targetPosition, 0.02f));
 
+
         //Drone
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
         Imgui_layer::getInstance().addWidget(new CheckBox("inteligenta_artificiala", &inteligenta_artificiala));
         Imgui_layer::getInstance().addWidget(new DragFloat("Motor thrust power", &maxPower, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragFloat("Motor minimum power", &minPower, 0.1f));
+        Imgui_layer::getInstance().addWidget(new Value("Linear Velocity:", &angularVel));
         Imgui_layer::getInstance().addWidget(new Value("ROLL Value:", &rollValue));
         Imgui_layer::getInstance().addWidget(new Value("PITCH value:", &pitchValue));
         Imgui_layer::getInstance().addWidget(new Value("MIDDDLE point:", &middlePointDebug));
-        Imgui_layer::getInstance().addWidget(new Value("Output Roll:", &outputRoll));
-        Imgui_layer::getInstance().addWidget(new Value("Output Pitch:", &outputPitch));
+        Imgui_layer::getInstance().addWidget(new Value("Output Yaw:", &outputYaw));
+        Imgui_layer::getInstance().addWidget(new Value("Output Pitch:", &outputHeight));
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
         Imgui_layer::getInstance().addWidget(new CheckBox("Start motors", &startMotors));
         Imgui_layer::getInstance().addWidget(new ImGUI_text("Quaternion TEST"));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(&quatDummyTest, 0.1f));
         Imgui_layer::getInstance().addWidget(new CheckBox("Drone camera", &droneCamera));
+
         Imgui_layer::getInstance().addWidget(new ImGUI_text("Camera Location and Look"));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(&cameraLocation, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragPosRotScale(&lookingCamera, 0.1f));
+
+
+        Imgui_layer::getInstance().addWidget(new ImGUI_text("Sensor index"));
+        Imgui_layer::getInstance().addWidget(new InputInt("Map Select", &sensorID, 0, 3));
 
         Imgui_layer::getInstance().addWidget(new DragFloat("MIN_ALPHA", &MIN_ALPHA, 0.05f));
         Imgui_layer::getInstance().addWidget(new DragFloat("MAX_ALPHA", &MAX_ALPHA, 0.05f));
         Imgui_layer::getInstance().addWidget(new DragFloat("NOISE_THRESHOLD", &NOISE_THRESHOLD, 0.05f));
         Imgui_layer::getInstance().addWidget(new DragFloat("JUMP_THRESHOLD", &JUMP_THRESHOLD, 0.05f));
-        Imgui_layer::getInstance().addWidget(new DragFloat("SENSITIVITY TRUST", &SENSITIVITY, 0.1f));
-
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("FRONT LEFT"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_FRONTLEFT, 0.01f));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("BACK LEFT"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_BACKLEFT, 0.01f));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("FRONT RIGHT"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_FRONTRIGHT, 0.01f));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("BACK RIGHT"));
-        Imgui_layer::getInstance().addWidget(new DragPosRotScale(&posPropeller_BACKRIGHT, 0.01f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SENSITIVITY Yaw", &SENSITIVITY, 0.1f));
+        Imgui_layer::getInstance().addWidget(new DragFloat("SENSITIVITY Roll", &SENSITIVITY_roll, 0.1f));
 
 
 

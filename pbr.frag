@@ -6,7 +6,7 @@
 //layout (location = 3) out vec4 FragNormalRoughness;
 
 layout (location = 0) out vec4 FragColor;
-layout (location = 1) out vec3 SaveDepth;
+layout (location = 1) out float SaveDepth;
 
 
 uniform sampler2D gPosition;
@@ -261,49 +261,11 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 
 void runLight()
 {
-    vec3 albedo;
-    float metallic;
-    float roughness;
+    vec3 albedo = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
     vec3 ARM = texture(gARM, TexCoords).rgb;
-    vec3 N = vec3(0.0,0.0,0.0);
-  
-    if(textureSelect == 0)
-    {   
-        albedo = u_albedo;
-        metallic = u_metallic;
-        roughness = u_roughness;
-        N = texture(gNormal, TexCoords).rgb;
-    }
-    if(textureSelect == 1)
-    {
-        albedo = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
-        metallic = ARM.g;
-        roughness = ARM.r;
-        N = texture(gNormal, TexCoords).rgb;
-    }
-
-
-    if(textureSelect == 2)
-    {
-        albedo = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
-        metallic = u_metallic; // screen buffer...
-        roughness = u_roughness;  // screen buffer...
-        N = texture(gNormal, TexCoords).rgb;
-    }
-    if(textureSelect == 3)
-    {
-        albedo = pow(vec3(ARM.g), vec3(2.2));
-        metallic = u_metallic;
-        roughness = u_roughness;
-        N = texture(gNormal, TexCoords).rgb;
-    }
-    if(textureSelect == 4)
-    {
-        albedo = pow(vec3(ARM.r), vec3(2.2));
-        metallic = u_metallic;
-        roughness = u_roughness;
-        N = texture(gNormal, TexCoords).rgb;
-    }
+    float metallic = ARM.g;;
+    float roughness = ARM.r;
+    vec3 N = texture(gNormal, TexCoords).rgb;
 
     vec3 WorldPos = texture(gPosition, TexCoords).rgb;
     vec3 V = normalize(camPos - WorldPos);
@@ -400,10 +362,11 @@ void runDepth()
 {   
     vec3 position = texture(gPosition, TexCoords).rgb;
     vec3 fragPos = vec3(view * vec4(position, 1.0));
-    float z = fragPos.z * 2.0 - 1.0; // Back to NDC 
 
-    float liniar = (2.0 * depth_near * depth_far) / (depth_far + depth_near - z * (depth_far - depth_near));
-    SaveDepth = vec3(liniar);
+    float z = -fragPos.z;
+    float normalizedDepth = z / depth_far;
+    
+    SaveDepth = clamp(normalizedDepth, 0.0, 1.0);
 }
 
 void main()

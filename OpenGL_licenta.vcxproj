@@ -221,6 +221,8 @@
     <None Include="cubemap.vert" />
     <None Include="cube_irradiance.frag" />
     <None Include="cube_prefilter.frag" />
+    <None Include="debug_shader.frag" />
+    <None Include="debug_shader.vert" />
     <None Include="fragment.frag" />
     <None Include="frame.frag" />
     <None Include="frame.vert" />

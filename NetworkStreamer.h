@@ -19,7 +19,7 @@ class FFmpegStreamer {
 private:
     struct FrameData {
         std::vector<unsigned char> color; // RGBA (src_width * src_height * 4)
-        std::vector<unsigned char> depth; // GL_UNSIGNED_BYTE (src_width * src_height * 1)
+        std::vector<float> depth;
     };
 
     // FFmpeg structs
@@ -50,42 +50,52 @@ private:
     void InitFFmpeg(const std::string& target_ip, int port) {
         avformat_network_init();
 
-        // Folosim protocolul UDP pentru streaming cu latență minimă
-        std::string url = "udp://" + target_ip + ":" + std::to_string(port) + "?pkt_size=1316";
+        // 1. Configurare URL UDP pentru low-latency (fără buffer pe socket)
+        std::string url = "udp://" + target_ip + ":" + std::to_string(port) +
+            "?pkt_size=1316&buffer_size=65536&fifo_size=0&overrun_nonfatal=1";
 
         avformat_alloc_output_context2(&fmt_ctx, nullptr, "mpegts", url.c_str());
         if (!fmt_ctx) {
             throw std::runtime_error("Cannot allocate context for FFmpeg");
         }
 
-        // Căutăm encoderul H.264
+        // Elimină buffer-ul de format și forțează trimiterea imediată a pachetelor
+        fmt_ctx->flags |= AVFMT_FLAG_NOBUFFER | AVFMT_FLAG_FLUSH_PACKETS;
+
         const AVCodec* codec = avcodec_find_encoder_by_name("libx264");
         if (!codec) {
-            std::cout << "[Warning] libx264 (software) not found, checking for openh264...\n";
             codec = avcodec_find_encoder_by_name("openh264");
         }
         if (!codec) {
             codec = avcodec_find_encoder(AV_CODEC_ID_H264);
         }
+        if (!codec) {
+            throw std::runtime_error("Nu s-a găsit niciun encoder H.264 compatibil.");
+        }
 
         stream = avformat_new_stream(fmt_ctx, nullptr);
         codec_ctx = avcodec_alloc_context3(codec);
 
-        // Configurare encoder pentru Latență Ultra-Scăzută (Zerolatency)
         codec_ctx->width = dst_width;
         codec_ctx->height = dst_height;
-        codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P; // Standardul de compresie video
+        codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+
         codec_ctx->time_base = { 1, fps };
         codec_ctx->framerate = { fps, 1 };
-        codec_ctx->gop_size = 60;
-        codec_ctx->max_b_frames = 0;
 
+        // 2. Setări critice Low-Delay pentru encoder
+        codec_ctx->gop_size = 15; // GOP mic (sau fps) pentru recuperare rapidă
+        codec_ctx->max_b_frames = 0; // Elimină decalajul introdus de B-frames
+        codec_ctx->flags |= AV_CODEC_FLAG_LOW_DELAY; // Flag FFmpeg pentru ultra-low delay
+
+        // Opțiuni specifice libx264
         av_opt_set(codec_ctx->priv_data, "preset", "ultrafast", 0);
         av_opt_set(codec_ctx->priv_data, "tune", "zerolatency", 0);
-        av_opt_set(codec_ctx->priv_data, "profile", "main", 0);
+        av_opt_set(codec_ctx->priv_data, "x264-params", "no-scenecut=1:repeat-headers=1:sliced-threads=1", 0);
+
         codec_ctx->bit_rate = 2000000;
-        //codec_ctx->rc_max_rate = 2500000;
-        //codec_ctx->rc_buffer_size = 500000;
+        codec_ctx->rc_max_rate = 2000000;
+        codec_ctx->rc_buffer_size = 1000000; // Buffer de bitrate redus la jumătate pentru CBR strict
 
         if (fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
             codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -103,27 +113,30 @@ private:
             }
         }
 
-        avformat_write_header(fmt_ctx, nullptr);
+        // Setare opțiuni suplimentare pentru MPEG-TS
+        AVDictionary* muxer_opts = nullptr;
+        av_dict_set(&muxer_opts, "mpegts_flags", "resend_headers", 0);
+        av_dict_set(&muxer_opts, "muxdelay", "0", 0);
 
-        // Alocăm frame-ul de input pe lățimea COMBINATĂ (RGBA)
+        avformat_write_header(fmt_ctx, &muxer_opts);
+        av_dict_free(&muxer_opts);
+
         frame_in = av_frame_alloc();
         frame_in->format = AV_PIX_FMT_RGBA;
         frame_in->width = combined_width;
         frame_in->height = src_height;
         av_frame_get_buffer(frame_in, 0);
 
-        // Alocăm frame-ul de output pe lățimea COMBINATĂ (YUV420P)
         frame_out = av_frame_alloc();
         frame_out->format = AV_PIX_FMT_YUV420P;
         frame_out->width = dst_width;
         frame_out->height = dst_height;
         av_frame_get_buffer(frame_out, 0);
 
-        // Inițializăm contextul de conversie din RGBA (dublu) în YUV420P (dublu)
         sws_ctx = sws_getContext(
             combined_width, src_height, AV_PIX_FMT_RGBA,
             dst_width, dst_height, AV_PIX_FMT_YUV420P,
-            SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
+            SWS_POINT, nullptr, nullptr, nullptr // SWS_POINT este cel mai rapid scaling
         );
     }
 
@@ -141,36 +154,58 @@ private:
                 frame_queue.pop();
             }
 
-            av_frame_make_writable(frame_in);
+            size_t expected_pixels = static_cast<size_t>(src_width) * src_height;
+            if (local_frame.color.size() < expected_pixels * 4 || local_frame.depth.size() < expected_pixels) {
+                continue;
+            }
+
+            // Asigurăm scrierea în frame-ul RGBA de intrare
+            if (av_frame_make_writable(frame_in) < 0) continue;
 
             uint8_t* dest_ptr = frame_in->data[0];
             int dest_stride = frame_in->linesize[0];
 
-            int color_row_stride = src_width * 4; // Culoarea are 4 canale (RGBA)
+            size_t color_bytes_per_row = src_width * 4;
 
-            // LIPIREA CELOR DOUĂ IMAGINI LINIE CU LINIE
             for (size_t y = 0; y < src_height; ++y) {
                 uint8_t* row_dest = dest_ptr + (y * dest_stride);
 
-                // 1. Copiem linia Y din imaginea COLOR pe partea STÂNGĂ
-                uint8_t* color_src = local_frame.color.data() + (y * color_row_stride);
-                std::memcpy(row_dest, color_src, color_row_stride);
+                const uint8_t* color_src = local_frame.color.data() + (y * color_bytes_per_row);
+                std::memcpy(row_dest, color_src, color_bytes_per_row);
 
-                uint8_t* depth_dest = row_dest + color_row_stride;
-                uint8_t* depth_src = local_frame.depth.data() + (y * color_row_stride);
-                std::memcpy(depth_dest, depth_src, color_row_stride);
+                uint8_t* depth_dest = row_dest + color_bytes_per_row;
+                const float* depth_src_row = local_frame.depth.data() + (y * src_width);
+
+                for (size_t x = 0; x < src_width; ++x) {
+                    float depth_val = depth_src_row[x];
+
+                    constexpr float max_depth = 10.0f;
+                    float normalized = depth_val / max_depth;
+                    if (normalized < 0.0f) normalized = 0.0f;
+                    if (normalized > 1.0f) normalized = 1.0f;
+
+                    uint8_t gray_val = static_cast<uint8_t>(normalized * 255.0f);
+
+                    depth_dest[x * 4 + 0] = gray_val; // Red
+                    depth_dest[x * 4 + 1] = gray_val; // Green
+                    depth_dest[x * 4 + 2] = gray_val; // Blue
+                    depth_dest[x * 4 + 3] = 255;      // Alpha
+                }
             }
 
-            // Realizăm conversia de culoare și scalarea din RGBA în YUV420P
-            av_frame_make_writable(frame_out);
+            // 2. CONVERSIA DIN RGBA ÎN YUV420P
+            if (av_frame_make_writable(frame_out) < 0) continue;
+
             sws_scale(
-                sws_ctx, frame_in->data, frame_in->linesize, 0, src_height,
+                sws_ctx,
+                frame_in->data, frame_in->linesize, 0, src_height,
                 frame_out->data, frame_out->linesize
             );
 
+            // Asetăm timestamp-ul pe frame-ul convertit
             frame_out->pts = frame_pts++;
 
-            // Trimiterea frame-ului către encoder
+            // 3. TRIMITEREA FRAME-ULUI YUV420P CĂTRE ENCODER
             int ret = avcodec_send_frame(codec_ctx, frame_out);
             if (ret < 0) continue;
 
@@ -198,12 +233,10 @@ public:
     FFmpegStreamer(const std::string& target_ip, int port, size_t width, size_t height)
         : src_width(width), src_height(height)
     {
-        // Lățimea imaginii combinate este dublul lățimii inițiale
         combined_width = src_width * 2;
 
-        // Păstrăm raportul pixelilor și în stream-ul de destinație
-        dst_width = combined_width/2;
-        dst_height = src_height/2;
+        dst_width = combined_width / 2;
+        dst_height = src_height / 2;
 
         InitFFmpeg(target_ip, port);
         worker_thread = std::thread(&FFmpegStreamer::WorkerLoop, this);
@@ -236,7 +269,7 @@ public:
         avformat_free_context(fmt_ctx);
     }
 
-    void PushFrame(const std::vector<unsigned char>& colorData, const std::vector<unsigned char>& depthData) {
+    void PushFrame(const std::vector<unsigned char>& colorData, const std::vector<float>& depthData) {
         std::lock_guard<std::mutex> lock(queue_mutex);
         if (frame_queue.size() >= MAX_QUEUE_SIZE) {
             frame_queue.pop(); // Aruncăm cadrele vechi dacă thread-ul de streaming nu ține pasul

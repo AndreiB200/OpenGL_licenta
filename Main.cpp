@@ -382,7 +382,7 @@ void createPBR_framebuffer()
 
     glGenTextures(1, &depthTextureSaved);
     glBindTexture(GL_TEXTURE_2D, depthTextureSaved);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL); // GL_RGBA before
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, WIDTH, HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depthTextureSaved, 0);
@@ -495,11 +495,11 @@ void renderQuad()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 }
-void renderColorAndDepth(Window &myWindow, Shader &quadShader)
+void renderColorAndDepth(Window &myWindow, Shader &quadShader, glm::mat4 view)
 {
+    glViewport(0, HEIGHT / 2, WIDTH / 2, HEIGHT / 2);
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // check FBO
-    glViewport(0, 0, WIDTH, HEIGHT);
-    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
 
@@ -511,6 +511,8 @@ void renderColorAndDepth(Window &myWindow, Shader &quadShader)
     quadShader.setInt("ssrTexture", 4);
     quadShader.setInt("ssaoTexture", 5);
     quadShader.setInt("ssaoBlurTexture", 6);
+
+    quadShader.setMat4("view", view);
 
 
     if (glfwGetKey(myWindow.window, GLFW_KEY_J) == GLFW_PRESS)
@@ -644,7 +646,7 @@ int main()
 
     //Model porsche = Model("Models/Porsche/porsche.fbx");
     //porsche.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
-    //porsche.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
+    ////porsche.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
     //porsche.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
 
 
@@ -658,6 +660,7 @@ int main()
         &drone,
         &soldier,
         &human,
+        //&porsche,
         //&propeler
     };
 
@@ -683,7 +686,7 @@ int main()
     createSSAOandSamples(ssaoKernel, ssaoNoise, ssaoShader);
     FFmpegStreamer streamer = FFmpegStreamer("100.70.184.28", 5554, 1280, 720);
     std::vector<unsigned char> colorData(1280 * 720 * 4);
-    std::vector<unsigned char> depthData(1280 * 720 * 4);
+    std::vector<float> depthData(1280 * 720);
     FrameCapturer capturer(1280, 720);
 
     // initialize static shader uniforms before rendering
@@ -706,7 +709,6 @@ int main()
     gamepad.bindDebugger(&imgui_helper);
 
 
-    //OpenGL_Settings::getInstance().enableCullFace(true);
     glm::mat4 proj = glm::perspective(glm::radians(camera.Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
     camera.setPerspective(proj);
 
@@ -718,13 +720,9 @@ int main()
     pbrShader.setFloat("ao", 1.0f);
 
     PrimitiveObj primObj;
-    glm::vec3 cameraLocalOffset = glm::vec3(0.0f, 1.5f, 5.0f);
-    glm::vec3 lookAtDrone = glm::vec3(0.0f, 0.0f, -1.0f);
-    Camera droneAttachedCamera(drone.position + cameraLocalOffset);
-    glm::mat4 projDrone = glm::perspective(glm::radians(60.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
-    droneAttachedCamera.setPerspective(projDrone);
-
     Drone droneSim = Drone(&myWindow, &drone, &propeler, &primObj, &imgui_helper);
+    droneSim.createCamera(WIDTH, HEIGHT);
+    droneSim.sensorsAttach(WIDTH, HEIGHT);
 
     PhysicsEngine::getInstance().showBodyInfo(drone.physics_id);
 
@@ -747,12 +745,6 @@ int main()
         // ------
         shadow.bindShadowMap(models);
 
-        glViewport(0, 0, WIDTH, HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer); // check FBO
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-
         // render scene, supplying the convoluted irradiance map to the final shader.
         // ------------------------------------------------------------------------------------------
         glm::mat4 projection = camera.GetProjection();
@@ -760,30 +752,17 @@ int main()
         glm::vec3 camPosition = camera.Position;
 
         // activate PBR Shader
-        // ------------------------------------------------------------------------------------------
-        //pbrShader.use();
-        //pbrShader.setVec3("u_albedo", glm::vec3(0.7f, 0.7f, 0.7f));
-        //// set SHADOW Map 0
-        //pbrShader.setInt("shadowMap", 0);
-        //// set IBL Maps 1-->3
-        //pbrShader.setInt("irradianceMap", 1);
-        //pbrShader.setInt("prefilterMap", 2);
-        //pbrShader.setInt("brdfLUT", 3);
-        //// set Texture2D Maps for the models in order 4-->8 (albedo, metal, normal, roughness, ~alpha)
-        //pbrShader.setInt("albedoMap", 4);
-        //pbrShader.setInt("metallicMap", 5);
-        //pbrShader.setInt("normalMap", 6);
-        //pbrShader.setInt("roughnessMap", 7);
-        //pbrShader.setInt("alphaMap", 8);
+        // 
 
-        //pbrShader.setFloat("depth_near", imgui_helper.depth_near);
-        //pbrShader.setFloat("depth_far", imgui_helper.depth_far);
+        droneSim.gamepadControl(gamepad);
+        if (imgui_helper.startMotors) {
+            for (int i = 0; i < 9; i++)
+            {
+                droneSim.flyDrone(geometryShaderBuffer);
+            }
+        }
 
-        //pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
-
-
-        
-        if(!start)
+        if (!start)
         {
             projection = camera.GetProjection();
             view = camera.GetViewMatrix();
@@ -791,62 +770,57 @@ int main()
         }
         if (imgui_helper.droneCamera)
         {
-            cameraLocalOffset = imgui_helper.cameraLocation;
-            lookAtDrone = imgui_helper.lookingCamera;
-
-            glm::vec3 dronePosition = drone.position;
-            glm::quat droneQuaternion = drone.quaternion;
-
-            glm::vec3 rotateOffset = droneQuaternion * cameraLocalOffset;
-            glm::vec3 cameraWorldPosition = dronePosition + rotateOffset;
-            glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
-            glm::mat4 viewMatrix = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * lookAtDrone), cameraUp);
-            glm::mat4 projDrone = droneAttachedCamera.GetProjection();
-            projection = projDrone;
-            view = viewMatrix;
-            camPosition = cameraWorldPosition;
+            droneSim.cameraAnimation(models, projection, view, camPosition);
+            imgui_helper.cameraDebugPos = camPosition;
         }
 
         glm::mat4 inverseProj = glm::inverse(projection);
         
+        glViewport(0, 0, WIDTH, HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer); // check FBO
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+
+        glDepthFunc(GL_LEQUAL);
+        ibl.drawBackground(view, projection);
+
+        glLineWidth(2.0f);
+        if (imgui_helper.physicsDebugRender)
+            PhysicsEngine::getInstance().drawDebug(view, projection);
+
         geometryShaderBuffer.use();
         geometryShaderBuffer.setMat4("view", view);
         geometryShaderBuffer.setMat4("projection", projection);
+
         geometryShaderBuffer.setInt("albedoMap", 4);
         geometryShaderBuffer.setInt("metallicMap", 5);
         geometryShaderBuffer.setInt("normalMap", 6);
         geometryShaderBuffer.setInt("roughnessMap", 7);
 
-            glm::vec3 newPos = lightPositions[0];
-            shadow.lightPos = lightPositions[0];
-            //pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
-            //pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
-            lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
+        glm::vec3 newPos = lightPositions[0];
+        shadow.lightPos = lightPositions[0];
+        lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
 
-            if (imgui_helper.secvential)
-            {
-                for (int i = 0; i < models.size(); i++)
-                    models[i]->drawDebug(geometryShaderBuffer);
-            }
-            else
-            {
-                for (int i = 0; i < models.size(); i++)
-                    models[i]->draw(geometryShaderBuffer);
-            }
-
-        droneSim.gamepadControl(gamepad);
-        if (imgui_helper.startMotors) {
-            for (int i = 0; i < 8; i++)
-            {
-                droneSim.flyDrone(geometryShaderBuffer);
-            }
+        
+        if (imgui_helper.secvential)
+        {
+            for (int i = 0; i < models.size(); i++)
+                models[i]->drawDebug(geometryShaderBuffer);
+        }
+        else
+        {
+            for (int i = 0; i < models.size(); i++)
+                models[i]->draw(geometryShaderBuffer);
         }
 
-        //-------------------
+        //---------------------------------------------------------
         // SCREEN SPACE PASS
+
         // Ambient Occlussion
         glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         ssaoShader.use();
         ssaoShader.setMat4("projection", projection);
@@ -878,10 +852,10 @@ int main()
 
         // PBR SHADING 
         glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-
         pbrShader.use();
-        pbrShader.setVec3("camPos", camera.Position);
+        pbrShader.setVec3("camPos", camPosition);
         pbrShader.setMat4("view", view);
 
         pbrShader.setInt("shadowMap", 0);
@@ -910,8 +884,6 @@ int main()
         glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_2D, ssaoBlured);
 
-        
-        pbrShader.setVec3("camPos", camera.Position);
         pbrShader.setVec3("lightPositions[" + std::to_string(0) + "]", newPos);
         lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
         pbrShader.setVec3("lightColors[" + std::to_string(0) + "]", lightColors[0]);
@@ -922,11 +894,11 @@ int main()
         pbrShader.setFloat("lightWidth", imgui_helper.lightWidth);
         renderQuad();
 
-        //ibl.drawBackground(view, projection);
        
 
         // Reflection
         glBindFramebuffer(GL_FRAMEBUFFER, ssrFBO);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ssrShader.use();
@@ -934,7 +906,6 @@ int main()
         ssrShader.setInt("gNormal", 1);
         ssrShader.setInt("gAlbedo", 2);
         ssrShader.setInt("gARM", 3);
-
 
         ssrShader.setMat4("uProjection", projection);
         ssrShader.setMat4("uView", view);
@@ -955,16 +926,22 @@ int main()
         renderQuad();
 
 
-        //glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
-        //capturer.CaptureAndProcess(droneSim, streamer);
+        glBindFramebuffer(GL_FRAMEBUFFER, pbrFBO);
+        capturer.CaptureAndProcess(droneSim, streamer);
 
-        renderColorAndDepth(myWindow, quadShader);
+        renderColorAndDepth(myWindow, quadShader, view);
 
-        glLineWidth(2.0f);
-        if (imgui_helper.physicsDebugRender)
-            PhysicsEngine::getInstance().drawDebug(view, projection);
+        imgui_helper.drawDebuggingState(gBuffer, WIDTH, HEIGHT, projection, view);
 
-        if (glfwGetKey(myWindow.window, GLFW_KEY_1) == GLFW_PRESS) 
+        droneSim.drawCubesFromPoints(imgui_helper.noColorDebugShader);
+        droneSim.renderPropellers(imgui_helper.noColorDebugShader);
+
+        glDepthMask(GL_TRUE);
+
+        droneSim.drawSensorData();
+
+        
+        if (glfwGetKey(myWindow.window, GLFW_KEY_0) == GLFW_PRESS) 
         {
             shadow.shadowDebug();
         }

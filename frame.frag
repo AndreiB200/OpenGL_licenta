@@ -13,7 +13,7 @@ uniform sampler2D ssrTexture;
 uniform sampler2D ssaoTexture;
 uniform sampler2D ssaoBlurTexture;
 
-
+uniform mat4 view;
 
 uniform int u_mode = 0;             
 uniform float uMaxMipLevel = 5.0;

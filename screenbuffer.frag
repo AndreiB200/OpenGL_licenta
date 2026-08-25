@@ -16,9 +16,9 @@ uniform sampler2D roughnessMap;
 
 uniform int textureSelect = 1;
 
-uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
+uniform vec3 u_albedo = vec3(0.6,0.6,0.6);
 uniform float u_metallic = 0.1;
-uniform float u_roughness = 0.9;
+uniform float u_roughness = 0.1;
 
 
 vec3 getNormalFromMap()
@@ -39,7 +39,7 @@ vec3 getNormalFromMap()
 }
 
 void main()
-{    
+{
     gPosition = WorldPos;
     float roughness = 0.9;
     float metallic = 0.0;

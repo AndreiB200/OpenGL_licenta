@@ -47,6 +47,10 @@ void main() {
         offset.xy = offset.xy * 0.5 + 0.5;     
         
         vec3 sampleWorldPos = texture(gPosition, offset.xy).xyz;
+        if (length(sampleWorldPos) == 0.0) {
+            continue;
+        }
+
         float sampleDepth   = (view * vec4(sampleWorldPos, 1.0)).z;
         
         float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
