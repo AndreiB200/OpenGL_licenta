@@ -77,8 +77,6 @@ public:
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        glDisable(GL_DEPTH_TEST);        
-        glDepthMask(GL_TRUE);
         noColorDebugShader.use();
         noColorDebugShader.setMat4("projection", projection);
         noColorDebugShader.setMat4("view", view);
@@ -149,10 +147,12 @@ public:
     glm::vec3 targetPosition = glm::vec3(0.0f, 2.0f, 0.0f);
     bool collision = false;
     bool remoteControl = false;
-    bool userAcceptAi = false;
     float depth_near = 0.001f, depth_far = 100.0f;
     float cubeSizes = 0.03;
     float angularVel = 0.0f;
+    bool drawPoints = false;
+    bool drawVoxelGrid = false;
+    bool sendVoxelsNetwork_button = false;
     
     // Propeller positions
     glm::vec3 posPropeller_FRONTLEFT = glm::vec3(1.88f, -0.35f, 1.62f);
@@ -172,8 +172,12 @@ public:
 
         Imgui_layer::getInstance().addWidget(new CheckBox("Gamepad connected", &gamepadState));
         Imgui_layer::getInstance().addWidget(new CheckBox("Remote controll Ai", &remoteControl));
-        Imgui_layer::getInstance().addWidget(new CheckBox("Accept Ai ?", &userAcceptAi));
         Imgui_layer::getInstance().addWidget(new CheckBox("Debug Physics collisions", &physicsDebugRender));
+        Imgui_layer::getInstance().addWidget(new CheckBox("inteligenta_artificiala", &inteligenta_artificiala));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Draw LiDAR Points", &drawPoints));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Draw Voxel Grid", &drawVoxelGrid));
+        Imgui_layer::getInstance().addWidget(new CheckBox("Send Voxels Network", &sendVoxelsNetwork_button));
+
 
         Imgui_layer::getInstance().addWidget(new InputInt("SSR uMaxSteps", &uMaxSteps, 0, 1200));
         Imgui_layer::getInstance().addWidget(new InputInt("SSR uBinarySearchSteps", &uBinarySearchSteps, 0, 80));
@@ -203,8 +207,7 @@ public:
         Imgui_layer::getInstance().addWidget(new Value(" X:", &currentPos.x)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Y:", &currentPos.y)); Imgui_layer::getInstance().addWidget(new SameLine());
         Imgui_layer::getInstance().addWidget(new Value(" Z:", &currentPos.z));
-        Imgui_layer::getInstance().addWidget(new ImGUI_text("DEBUG Camera Position"));
-        positionSlide("Camera", cameraDebugPos);
+
         Imgui_layer::getInstance().addWidget(new DragFloat("depth_near", &depth_near, 0.01f));
         Imgui_layer::getInstance().addWidget(new DragFloat("depth_far", &depth_far, 0.1f));
 
@@ -243,7 +246,6 @@ public:
 
         //Drone
         Imgui_layer::getInstance().addWidget(new ImGUI_text(""));
-        Imgui_layer::getInstance().addWidget(new CheckBox("inteligenta_artificiala", &inteligenta_artificiala));
         Imgui_layer::getInstance().addWidget(new DragFloat("Motor thrust power", &maxPower, 0.1f));
         Imgui_layer::getInstance().addWidget(new DragFloat("Motor minimum power", &minPower, 0.1f));
         Imgui_layer::getInstance().addWidget(new Value("Linear Velocity:", &angularVel));

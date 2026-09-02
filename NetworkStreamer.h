@@ -339,6 +339,32 @@ public:
         }
     }
 
+    void sendHistogram(const std::vector<float>& histogram) {
+        if (histogram.empty()) return;
+
+        std::string topic = "HIST";
+        zmq::message_t topic_msg(topic.data(), topic.size());
+        pub_socket_.send(topic_msg, zmq::send_flags::sndmore);
+
+        size_t bytes = histogram.size() * sizeof(float);
+        zmq::message_t data_msg(bytes);
+        std::memcpy(data_msg.data(), histogram.data(), bytes);
+
+        pub_socket_.send(data_msg, zmq::send_flags::dontwait);
+    }
+
+    void sendVoxelData(const std::vector<glm::vec3>& voxelGridData)
+    {
+        if (voxelGridData.empty()) return;
+
+        std::string topic = "VOXEL";
+        zmq::message_t topic_msg(topic.data(), topic.size());
+        pub_socket_.send(topic_msg, zmq::send_flags::sndmore);
+
+        zmq::message_t message(voxelGridData.data(), voxelGridData.size() * sizeof(glm::vec3));
+        pub_socket_.send(message, zmq::send_flags::none);
+    }
+
     void start(const DronePose& pose_to_send, PythonCommand& cmd_to_receive, int pub_delay_ms = 20) {
         if (is_running_) return;
 
@@ -361,6 +387,10 @@ public:
 private:
     void pubWorkerLoop(const DronePose& pose, int delay_ms) {
         while (is_running_) {
+            std::string topic = "POSE";
+            zmq::message_t topic_msg(topic.data(), topic.size());
+            pub_socket_.send(topic_msg, zmq::send_flags::sndmore);
+
             zmq::message_t msg(&pose, sizeof(DronePose));
             pub_socket_.send(msg, zmq::send_flags::none);
 
@@ -390,4 +420,26 @@ private:
     std::thread pub_thread_;
     std::thread sub_thread_;
     std::atomic<bool> is_running_;
+};
+
+class VFHZmqVisualizer {
+public:
+    VFHZmqVisualizer(const std::string& endpoint = "tcp://127.0.0.1:5559")
+        : m_context(1), m_socket(m_context, zmq::socket_type::pub)
+    {
+        m_socket.bind(endpoint);
+    }
+
+    void sendHistogram(const std::vector<float>& histogram) {
+        // Trimitem direct array-ul de float-uri ca pachet de octeți
+        size_t bytes = histogram.size() * sizeof(float);
+        zmq::message_t message(bytes);
+        std::memcpy(message.data(), histogram.data(), bytes);
+
+        m_socket.send(message, zmq::send_flags::dontwait);
+    }
+
+private:
+    zmq::context_t m_context;
+    zmq::socket_t m_socket;
 };

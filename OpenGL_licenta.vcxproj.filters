@@ -9,10 +9,6 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{75431e6f-b135-4232-88b6-055232f2c9fc}</UniqueIdentifier>
     </Filter>
@@ -79,6 +75,9 @@
     <Filter Include="Shaders\Debugging\debug_shader">
       <UniqueIdentifier>{a367f8f9-9d44-4f2d-9f0f-581f6dc00c4c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Drone Classes">
+      <UniqueIdentifier>{1f37a2aa-5176-4baa-96ed-6fe21e9eff48}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad.c">
@@ -110,9 +109,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Shader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="imgui\imstb_rectpack.h">
       <Filter>Header Files\imgui</Filter>
     </ClInclude>
@@ -146,9 +142,6 @@
     <ClInclude Include="stb_image_write.h">
       <Filter>Header Files\stb_image</Filter>
     </ClInclude>
-    <ClInclude Include="Timer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Imgui_layer.h">
       <Filter>Header Files\Debuggers class</Filter>
     </ClInclude>
@@ -157,9 +150,6 @@
     </ClInclude>
     <ClInclude Include="StructuresHelpers.h">
       <Filter>Header Files\Debuggers class</Filter>
-    </ClInclude>
-    <ClInclude Include="Thread_Pool.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Mesh.h">
       <Filter>Scene</Filter>
@@ -179,9 +169,6 @@
     <ClInclude Include="Camera.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Window.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="OpenGL_Settings.h">
       <Filter>Header Files\OpenGL_setting</Filter>
     </ClInclude>
@@ -197,26 +184,44 @@
     <ClInclude Include="PrimitiveObj.h">
       <Filter>Header Files\OpenGL_setting</Filter>
     </ClInclude>
-    <ClInclude Include="DebuggerClass.h">
-      <Filter>Header Files\Debuggers class</Filter>
-    </ClInclude>
     <ClInclude Include="DebugList.h">
       <Filter>Header Files\Debuggers class</Filter>
     </ClInclude>
     <ClInclude Include="PhysicsEngine.h">
       <Filter>Rendering</Filter>
     </ClInclude>
-    <ClInclude Include="NetworkStreamer.h">
-      <Filter>Header Files\Debuggers class</Filter>
-    </ClInclude>
     <ClInclude Include="Drone.h">
-      <Filter>Scene</Filter>
+      <Filter>Header Files\Drone Classes</Filter>
     </ClInclude>
     <ClInclude Include="Gamepad.h">
-      <Filter>Header Files\Debuggers class</Filter>
+      <Filter>Header Files\Drone Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkStreamer.h">
+      <Filter>Header Files\Drone Classes</Filter>
     </ClInclude>
     <ClInclude Include="FrameCapturer.h">
-      <Filter>Header Files\Debuggers class</Filter>
+      <Filter>Header Files\Drone Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="DebuggerClass.h">
+      <Filter>Header Files\Drone Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorFieldHistogram.h">
+      <Filter>Header Files\Drone Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="Shader.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Window.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Thread_Pool.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="VoxelGrid.h">
+      <Filter>Header Files\Drone Classes</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

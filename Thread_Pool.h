@@ -13,7 +13,14 @@ private:
 	std::mutex m;
 	std::vector<std::thread> threads;
 	std::queue <std::function<void()>> jobs;
+
+	std::condition_variable cv;
+	std::condition_variable cv_job_added;
+	std::condition_variable cv_finished;
+
+	std::atomic<size_t> active_workers{ 0 };
 	std::mutex queue_mutex;
+	bool should_stop = false;
 
 	void loadThreads()
 	{
@@ -23,18 +30,32 @@ private:
 		}
 	}
 
-	void ThreadLoop()
-	{
-		while (true)
-		{
-			if (jobs.empty())
-				return;
-			queue_mutex.lock();
+	void ThreadLoop() {
+		while (true) {
 			std::function<void()> job;
-			job = jobs.front();
-			jobs.pop();
-			queue_mutex.unlock();
+			{
+				std::unique_lock<std::mutex> lock(queue_mutex);
+				cv_job_added.wait(lock, [this]() {
+					return !jobs.empty() || should_stop;
+					});
+
+				if (should_stop && jobs.empty()) {
+					return;
+				}
+
+				job = std::move(jobs.front());
+				jobs.pop();
+
+				++active_workers;
+			}
+
 			job();
+			{
+				std::lock_guard<std::mutex> lock(queue_mutex);
+				--active_workers;
+			}
+
+			cv_finished.notify_one();
 		}
 	}
 
@@ -69,9 +90,11 @@ public:
 
 	void addJob(const std::function<void()>& job)
 	{
-		queue_mutex.lock();
-		jobs.push(job);
-		queue_mutex.unlock();
+		{
+			std::lock_guard<std::mutex> lock(queue_mutex);
+			jobs.push(job);
+		}
+		cv.notify_one();
 	}
 
 	void joinThreads()
@@ -89,16 +112,12 @@ public:
 		return true;
 	}	
 
-	void wait()
-	{
-		//m.lock();
-		while (true)
-		{
-			if (busy())
-				joinThreads();
-			else break;
-		}
-		//m.unlock();
+	void wait() {
+		std::unique_lock<std::mutex> lock(queue_mutex);
+
+		cv_finished.wait(lock, [this]() {
+			return jobs.empty() && (active_workers == 0);
+			});
 	}
 
 	void stop()

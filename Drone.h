@@ -2,6 +2,8 @@
 #ifdef _DRONE_
 
 #include <vector>
+#include "VectorFieldHistogram.h"
+#include "VoxelGrid.h"
 
 struct droneCamera
 {
@@ -15,17 +17,28 @@ struct droneCamera
 class Drone
 {
 public:
-    Window* myWindow;
-    Model* drone;
-    Model* propeler;
-    PrimitiveObj* primObj;
-
     struct propellerData {
         float MAX_FORCE, fortaM0, fortaM1, fortaM2, fortaM3;
         glm::vec3 coltLocal0, coltLocal1, coltLocal2, coltLocal3; 
         glm::quat quaternionDum;
     };
     
+    struct SampledDepth {
+        float ndcX;
+        float ndcY;
+        float value;
+    };
+
+    std::vector<glm::vec3> LiDARpoints;
+    LidarVoxelGrid lidarVoxelGrid;
+
+    Window* myWindow;
+    Model* drone;
+    Model* propeler;
+    PrimitiveObj* primObj;
+
+    VFHPlus3D vfhPlanner = VFHPlus3D();
+
     std::vector<droneCamera> cameras;
     GLuint depthFBO;
     GLuint depthTextures[3];
@@ -34,18 +47,12 @@ public:
 
     DebuggerClass* imgui_helper;
 
-
-    struct SampledDepth {
-        float ndcX;
-        float ndcY;
-        float value;
-        glm::vec3 position = glm::vec3(0.0f);
-    };
     std::vector<SampledDepth> points, pointsPrevious;
     float middlePoint = 0.0f, previous_middlePoint = 0.0f;
 
     DronePose dronePose{ 0.0f, 0.0f ,0.0f ,0.0f, 0.0f, 0.0f ,0.0f };
     PythonCommand received_cmd{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f ,0.0f, 0 };
+
     ZmqNode publisher;
 
 	Drone(Window* _myWindow, Model* droneModel, Model* _propeler, PrimitiveObj* _primObj, DebuggerClass* _imgui_helper)
@@ -56,14 +63,15 @@ public:
         primObj = _primObj;
         imgui_helper = _imgui_helper;
         points.reserve(64);
+        LiDARpoints.reserve(64);
         pointsPrevious.reserve(64);
         publisher.init();
         publisher.start(dronePose, received_cmd, 100);
+        vfhPlanner.bindPub(publisher);
     }
 
     bool resetPositionAndPID = false, control_position = false;
     float currentYaw = 0.0f;
-    float targetHeight = 0.0f;
     float pitchInput_X;
     float rollInput_Z;
     float yawInput_Y;
@@ -96,9 +104,19 @@ public:
         }
         gamepad_B_PressedLastFrame = gamepad_B_CurrentlyPressed;
 
-        targetHeight += 0.1f * (gamepad.getRightTrigger());
-        targetHeight -= 0.1f * (gamepad.getLeftTrigger());
-        if (targetHeight > 30.0f) targetHeight = 30.0f;
+        static bool gamepad_Y_PressedLastFrame = false;
+        bool gamepad_Y_CurrentlyPressed = gamepad.isButtonPressed(GLFW_GAMEPAD_BUTTON_Y);
+
+        bool droneCam = false;
+        if (gamepad_Y_CurrentlyPressed && !gamepad_Y_PressedLastFrame)
+        {
+            imgui_helper->droneCamera = !imgui_helper->droneCamera;
+        }
+        gamepad_Y_PressedLastFrame = gamepad_Y_CurrentlyPressed;
+
+        imgui_helper->targetPosition.y += 0.1f * (gamepad.getRightTrigger());
+        imgui_helper->targetPosition.y -= 0.1f * (gamepad.getLeftTrigger());
+        if (imgui_helper->targetPosition.y > 30.0f) imgui_helper->targetPosition.y = 30.0f;
 
         convertGamepad();
         dronePose.x = drone->position.x;
@@ -108,8 +126,8 @@ public:
         dronePose.qx = drone->quaternion.x;
         dronePose.qy = drone->quaternion.y;
         dronePose.qz = drone->quaternion.z;
-        std::cout << received_cmd.x << " " << received_cmd.y << " " << received_cmd.z << " "
-            << received_cmd.qw << " " << received_cmd.qx << " " << received_cmd.qy << " " << received_cmd.qz << " " << received_cmd.flag << "\n";
+        /*std::cout << received_cmd.x << " " << received_cmd.y << " " << received_cmd.z << " "
+            << received_cmd.qw << " " << received_cmd.qx << " " << received_cmd.qy << " " << received_cmd.qz << " " << received_cmd.flag << "\n";*/
     }
 
     float goTo_X = 0.0f;
@@ -138,7 +156,7 @@ public:
         imgui_helper->quatDummyTest.x = glm::degrees(targetPitch);
         imgui_helper->quatDummyTest.y = glm::degrees(currentYaw);
         imgui_helper->quatDummyTest.z = glm::degrees(targetRoll);
-        imgui_helper->droneTargetHeight = targetHeight;
+        imgui_helper->droneTargetHeight = imgui_helper->targetPosition.y;
     }
 
     void createCamera(int WIDTH, int HEIGHT)
@@ -291,10 +309,14 @@ public:
         view = cameras[0].view;
     }
 
+
+
     void drawCubesFromPoints(Shader &localShader)
     {
         glm::mat4 invProj = glm::inverse(cameras[0].projection);
         glm::mat4 invView = glm::inverse(cameras[0].view);
+        primObj->scale(imgui_helper->cubeSizes);
+        localShader.setVec3("debugColor", glm::vec3(0.0f, 1.0f, 0.0f));
 
         for (size_t i = 0; i < points.size(); ++i) {
             float zView = points[i].value * imgui_helper->depth_far;
@@ -307,13 +329,33 @@ public:
             glm::vec3 viewPos = rayDir * (zView / -rayDir.z);
 
             glm::vec3 worldPos = glm::vec3(invView * glm::vec4(viewPos, 1.0f));
-            points[i].position = worldPos;
+            LiDARpoints[i] = worldPos;
+            if (imgui_helper->drawPoints)
+            {
+                primObj->move(worldPos);
+                primObj->renderCube_shader(localShader);
+            }
+        }
+        
+        if (imgui_helper->drawVoxelGrid)
+        {
+            lidarVoxelGrid.addPoints(LiDARpoints, drone->position);
+            std::vector<glm::vec3> getVoxels = lidarVoxelGrid.getUniqueCenters();
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<size_t> dist(0, getVoxels.size() - 1);
 
-            primObj->move(worldPos);
-            primObj->scale(imgui_helper->cubeSizes);
-            primObj->rotate_Q(drone->quaternion);
-            localShader.setVec3("debugColor", glm::vec3(0.0f, 1.0f - points[i].value, 0.0f));
-            primObj->renderCube_shader(localShader);
+            for (int index = 0; index < 300; index++)
+            {
+                primObj->move(getVoxels[dist(gen)]);
+                primObj->renderCube_shader(localShader);
+            }
+
+            if (imgui_helper->sendVoxelsNetwork_button)
+            {
+                publisher.sendVoxelData(getVoxels);
+                imgui_helper->sendVoxelsNetwork_button = false;
+            }
         }
     }
 
@@ -325,9 +367,9 @@ public:
     {
         const int width = 1280;
         const int height = 720;
-        const int count = 12; 
+        const int count = 16; 
 
-        if (points.size() != count*count) points.resize(count * count);
+        if (points.size() != count * count) { points.resize(count * count); LiDARpoints.resize(count * count); }
         if (pointsPrevious.size() != count * count) pointsPrevious.resize(count * count);
 
         if (depthData.size() < static_cast<size_t>(width * height)) return;
@@ -343,7 +385,6 @@ public:
         const float stepY = static_cast<float>(height) / (count + 1);
 
         int pointIndex = 0;
-        std::vector<float> neighborhood(9);
 
         for (int r = 1; r <= count; ++r) {
             int y = std::clamp(static_cast<int>(r * stepY), 0, height - 1);
@@ -359,10 +400,6 @@ public:
 
                 float finalDepth = medianDepthValue;
 
-                if (!firstFrame) {
-                    float prevDepth = pointsPrevious[pointIndex].value;
-                }
-
                 points[pointIndex++] = { ndcX, ndcY, finalDepth };
             }
         }
@@ -370,60 +407,14 @@ public:
         isInitialized = true;
     }
     
-    bool calculateAvoidanceVector(float& pitch, float& roll, float& DISTANCE_THRESHOLD) {
-        static float lastPitch = 0.0f;
-        static float lastRoll = 0.0f;
-
-        float totalPitchRepulsion = 0.0f;
-        float totalRollRepulsion = 0.0f;
-        float totalWeight = 0.0f;
-
-        bool objectToClose = false, firstCollisionCheck = false;
-
-        for (size_t i = 0; i < points.size(); i++)
-        {
-            float proximity = glm::clamp(1.0f - points[i].value * 1.5f, 0.0f, 1.0f);
-
-            float spatialWeight = getCenterWeight(points[i].ndcX, points[i].ndcY);
-
-            float weight = proximity;
-
-            totalRollRepulsion += points[i].ndcX * weight;
-            totalPitchRepulsion += points[i].ndcY * weight;
-
-            totalWeight += weight;
-
-            float distanceToObstacle = points[i].value * 100.0f;
-            if (distanceToObstacle < DISTANCE_THRESHOLD && firstCollisionCheck == false)
-            {
-                objectToClose = true;
-                firstCollisionCheck = true;
-            }
-        }
-
-        if (totalWeight > 0.0001f) {
-            roll = totalRollRepulsion / totalWeight;
-            pitch = totalPitchRepulsion / totalWeight;
-        }
-        else {
-            roll = 0.0f;
-            pitch = 0.0f;
-        }
-
-        lastRoll = roll;
-        lastPitch = pitch;
-        previous_middlePoint = middlePoint;
-
-        
-        MIN_ALPHA = imgui_helper->MIN_ALPHA;
-        MAX_ALPHA = imgui_helper->MAX_ALPHA;
-        NOISE_THRESHOLD = imgui_helper->NOISE_THRESHOLD;
-        JUMP_THRESHOLD = imgui_helper->JUMP_THRESHOLD;
-
-        return objectToClose;
+    glm::vec3 calculateAvoidanceVector(glm::vec3& actualPos, glm::vec3 &targetPos, glm::vec3 &forward) {
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 direction = vfhPlanner.computeSteeringDirection(actualPos, forward, up, targetPos, LiDARpoints);
+        imgui_helper->targetCollision = direction;
+        return direction;
     }
     
-    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 angularVel, glm::vec3 &targetCollision, float &collisionYaw)
+    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 angularVel, glm::vec3 &targetCollision, glm::vec3 &droneDirection, float &collisionYaw)
     {
         goTo_X = +positioning_X + received_cmd.x;
         goTo_Z = +positioning_Z + received_cmd.z;
@@ -433,35 +424,17 @@ public:
         float rightPos = positioning_Z;
         
         // Speed | distance | collisions
-        float MAX_SPEED = 7.0f;
-        float DISTANCE_THRESHOLD = 4.0f;
-        float actualSpeed = glm::length(angularVel);     imgui_helper->angularVel = glm::length(angularVel);
-        float extractYaw, extractHeight;
+        float MAX_SPEED = 5.0f;
         float distanceToObstacle = middlePoint * 100.0f;    imgui_helper->middlePointDebug = distanceToObstacle; // debug
 
-        // Max speeds and distance
-        bool isCollidingNow = calculateAvoidanceVector(extractHeight, extractYaw, DISTANCE_THRESHOLD);
-        float preventiveSpeed = 1.0f, minimumSpeed = std::abs(MAX_SPEED - std::abs(MAX_SPEED * extractYaw));
+        float preventiveSpeed = 5.0f;
         
-
         // Direction crusing
-        glm::vec3 forward = glm::rotate(glm::normalize(currentQuat), glm::vec3(0.0f, 0.0f, 1.0f));
-        glm::vec3 forwardXZ = glm::vec3(forward.x, 0.0f, forward.z);
-        glm::vec3 left_right = glm::normalize(glm::vec3(glm::cross(forwardXZ, glm::vec3(0.0f, 1.0f, 0.0f))));
-
-        // continuous depth and proximity check for turning
-        // YAW
-        static float collisionRoll = 0.0f, smoothYawRot = 0.0f;
-        if (std::abs(extractYaw) < 0.05f || std::abs(extractYaw) > 0.5f)
-            extractYaw = 0.0f;
-        actualSpeed = glm::clamp(actualSpeed, 0.0f, 0.8f);
-        smoothYawRot = glm::mix(smoothYawRot, smoothYawRot + (extractYaw * actualSpeed * imgui_helper->SENSITIVITY), 0.015f);
-        collisionYaw = collisionYaw + smoothYawRot;        
-        // ROLL
-        collisionRoll = glm::mix(collisionRoll, -extractYaw * imgui_helper->SENSITIVITY_roll, 0.1f);
-        preventiveSpeed = MAX_SPEED - std::abs(extractYaw * imgui_helper->SENSITIVITY);
-
-        // Check for a collision
+        glm::vec3 forwardVec = glm::rotate(glm::normalize(currentQuat), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::vec3 forwardDirection = glm::vec3(forwardVec.x, 0.0f, forwardVec.z);
+        glm::vec3 left_rightDirection = glm::normalize(glm::vec3(glm::cross(forwardDirection, glm::vec3(0.0f, 1.0f, 0.0f))));
+        
+        // Remote connection
         static float receivedIncreasingYaw = 0.0f;
         if (imgui_helper->remoteControl && received_cmd.flag == 1)
         {
@@ -469,34 +442,27 @@ public:
             collisionYaw = collisionYaw + receivedIncreasingYaw;
         }
 
-        // collision detection
         glm::vec3 moveDirection;
-        float targetSpeed = preventiveSpeed;
-        if (isCollidingNow)
-        {
-            // reverse backwards after collision
-            float dangerFactor = glm::clamp((DISTANCE_THRESHOLD - distanceToObstacle) / MAX_SPEED, 0.0f, 1.0f);
-            targetSpeed = 3.0f * (1.0f - dangerFactor * 5.0f);
-
-            imgui_helper->outputHeight = extractHeight;
-
-            imgui_helper->collision = true;
-        }
-        else
-        {
-            imgui_helper->collision = false;
-        }
-
+        
         static float smoothSpeed = 0.0f;
-        smoothSpeed = glm::mix(smoothSpeed, targetSpeed, 0.01f);
-        moveDirection = (forwardXZ * smoothSpeed * forwardPos) + (left_right * (collisionRoll + rightPos));
+        smoothSpeed = glm::mix(smoothSpeed, preventiveSpeed, 0.01f);
+        moveDirection = (forwardVec * smoothSpeed * forwardPos) + (left_rightDirection * smoothSpeed * rightPos);
         
         float saveY = targetCollision.y;
-        targetCollision = currentPos + moveDirection; 
-        targetCollision.y = saveY;
+        glm::vec3 vectorMovement = currentPos + moveDirection;
+        glm::vec3 saveTargetBefore = targetCollision;
 
-        imgui_helper->outputYaw = extractYaw;
-        imgui_helper->targetCollision = targetCollision;
+        if (std::abs(positioning_X) > 0.0f || std::abs(positioning_Z) > 0.0f)
+            targetCollision = vectorMovement;
+        else
+            targetCollision = targetCollision;
+
+        targetCollision.y = saveY;
+        glm::vec3 direction = glm::normalize(targetCollision - currentPos);
+
+        glm::vec3 vfhRes = vfhPlanner.computeAPFSteering(currentPos, targetPosition, LiDARpoints, 5.0f, 1.0f, 15.0f);
+        droneDirection = currentPos + vfhRes;
+        imgui_helper->targetCollision = vfhRes;
     }
 
 
@@ -505,6 +471,7 @@ public:
     propellerData propellers;
     void flyDrone(Shader pbrShader)
 	{
+        float dt = PhysicsEngine::getInstance().getPhysicsStep();
         bool inteligenta_artificiala = imgui_helper->inteligenta_artificiala;
         targetYawAngle = currentYaw;
 
@@ -548,22 +515,14 @@ public:
 
         imgui_helper->currentPos = currentPosition;
 
-        float dt = PhysicsEngine::getInstance().getPhysicsStep();
+        targetPosition = imgui_helper->targetPosition;
+        glm::vec3 droneDirection;
+        collisionDetection(currentPosition, currentQuat, currentAngVel, imgui_helper->targetPosition, droneDirection, targetYawAngle);
 
-        targetPosition = glm::vec3(imgui_helper->targetPosition.x, targetHeight, imgui_helper->targetPosition.z);
-        collisionDetection(currentPosition, currentQuat, currentAngVel, targetPosition, targetYawAngle);
         //processAiNetwork(targetPosition, targetYawAngle);
 
-        
-        if (imgui_helper->collision)
-        {
-            imgui_helper->inteligenta_artificiala = true;
-        }
-
-        bool userAcceptAi = imgui_helper->userAcceptAi;
-
         float heightError;
-        heightError = targetPosition.y - currentPosition.y;
+        heightError = droneDirection.y - currentPosition.y;
 
         float heightCorrection = pidHeight.Update(heightError, worldLinearVel.y, dt, 10.0f);
 
@@ -578,34 +537,54 @@ public:
 
         fortaRacheta = std::clamp(fortaRacheta, imgui_helper->minPower, imgui_helper->getMaxPower());
 
-        glm::vec3 convert;
-
-        float targetYaw = 0.0f;
-        if (inteligenta_artificiala && userAcceptAi) {
-            float errorX = targetPosition.x - currentPosition.x;
-            float errorZ = targetPosition.z - currentPosition.z;
-
-            float worldAccelX = pidX.Update(errorX, worldLinearVel.x, dt, 15.0f);
-            float worldAccelZ = pidZ.Update(errorZ, worldLinearVel.z, dt, 15.0f);
-
-            glm::vec3 forwardDir = currentQuat * glm::vec3(0.0f, 0.0f, -1.0f);
-            float currentYaw = atan2f(-forwardDir.x, -forwardDir.z);
-            float cosYaw = cosf(currentYaw);
-            float sinYaw = sinf(currentYaw);
-
-            float localAccelRight = worldAccelX * cosYaw - worldAccelZ * sinYaw; // Pe axa X locală
-            float localAccelForward = -worldAccelX * sinYaw - worldAccelZ * cosYaw; // Pe axa Z locală
-
-            float MAX_TILT = glm::radians(60.0f);
-            float targetPitch = std::clamp(-localAccelForward / 9.81f, -MAX_TILT, MAX_TILT);
-            float targetRoll = std::clamp(-localAccelRight / 9.81f, -MAX_TILT, MAX_TILT);
-            targetYaw = targetYawAngle;
-
-            glm::quat qPitch = glm::angleAxis(targetPitch, glm::vec3(1.0f, 0.0f, 0.0f));
-            glm::quat qYaw = glm::angleAxis(targetYawAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-            glm::quat qRoll = glm::angleAxis(targetRoll, glm::vec3(0.0f, 0.0f, 1.0f));
-            targetQuat = qYaw * qPitch * qRoll;
+        if (inteligenta_artificiala) 
+        {
+            layerPositionPID(droneDirection, targetQuat, currentQuat, currentPosition, worldLinearVel);
         }
+
+        float fortaM0 = 0.0f, fortaM1 = 0.0f, fortaM2 = 0.0f, fortaM3 = 0.0f;
+        layerAttitudePID(currentQuat, localAngVel, dt, fortaRacheta, fortaM0, fortaM1, fortaM2, fortaM3);
+        
+
+        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal0, directieRacheta, fortaM0, -1.0f); // Front Left
+        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal2, directieRacheta, fortaM2, 1.0f);  // Front Right
+        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal1, directieRacheta, fortaM3, 1.0f);  // Back Left
+        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal3, directieRacheta, fortaM1, -1.0f); // Back Right
+
+        savePropellers(imgui_helper->getMaxPower(), fortaM0, fortaM1, fortaM2, fortaM3, coltLocal0, coltLocal1, coltLocal2, coltLocal3, targetQuat);
+
+        PhysicsEngine::getInstance().run();
+	}
+
+    void layerPositionPID(glm::vec3 targetPosition, glm::quat &targetQuat, glm::quat currentQuat, glm::vec3 &currentPosition, glm::vec3 worldLinearVel)
+    {
+        float dt = PhysicsEngine::getInstance().getPhysicsStep();
+        float errorX = targetPosition.x - currentPosition.x;
+        float errorZ = targetPosition.z - currentPosition.z;
+
+        float worldAccelX = pidX.Update(errorX, worldLinearVel.x, dt, 15.0f);
+        float worldAccelZ = pidZ.Update(errorZ, worldLinearVel.z, dt, 15.0f);
+
+        glm::vec3 forwardDir = currentQuat * glm::vec3(0.0f, 0.0f, -1.0f);
+        float currentYaw = atan2f(-forwardDir.x, -forwardDir.z);
+        float cosYaw = cosf(currentYaw);
+        float sinYaw = sinf(currentYaw);
+
+        float localAccelRight = worldAccelX * cosYaw - worldAccelZ * sinYaw; // Pe axa X locală
+        float localAccelForward = -worldAccelX * sinYaw - worldAccelZ * cosYaw; // Pe axa Z locală
+
+        float MAX_TILT = glm::radians(20.0f);
+        float targetPitch = std::clamp(-localAccelForward / 9.81f, -MAX_TILT, MAX_TILT);
+        float targetRoll = std::clamp(-localAccelRight / 9.81f, -MAX_TILT, MAX_TILT);
+
+        glm::quat qPitch = glm::angleAxis(targetPitch, glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::quat qYaw = glm::angleAxis(targetYawAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::quat qRoll = glm::angleAxis(targetRoll, glm::vec3(0.0f, 0.0f, 1.0f));
+        targetQuat = qYaw * qPitch * qRoll;
+    }
+
+    void layerAttitudePID(glm::quat &currentQuat, glm::vec3 &localAngVel, float &dt, float &fortaRacheta, float &fortaM0, float &fortaM1, float &fortaM2, float &fortaM3)
+    {
 
         glm::quat targetRot = targetQuat;
         glm::quat errorQuat = glm::inverse(currentQuat) * targetRot;
@@ -626,57 +605,53 @@ public:
 
         float throttle = fortaRacheta;
 
-        float fortaM0 = throttle - pitchCorectie + rollCorectie - yawCorectie;
-        float fortaM1 = throttle + pitchCorectie - rollCorectie - yawCorectie;
-        float fortaM2 = throttle - pitchCorectie - rollCorectie + yawCorectie;
-        float fortaM3 = throttle + pitchCorectie + rollCorectie + yawCorectie;
+        fortaM0 = throttle - pitchCorectie + rollCorectie - yawCorectie;
+        fortaM1 = throttle + pitchCorectie - rollCorectie - yawCorectie;
+        fortaM2 = throttle - pitchCorectie - rollCorectie + yawCorectie;
+        fortaM3 = throttle + pitchCorectie + rollCorectie + yawCorectie;
 
         float MAX_FORCE = imgui_helper->getMaxPower();
         fortaM0 = std::clamp(fortaM0, 0.0f, MAX_FORCE);
         fortaM1 = std::clamp(fortaM1, 0.0f, MAX_FORCE);
         fortaM2 = std::clamp(fortaM2, 0.0f, MAX_FORCE);
         fortaM3 = std::clamp(fortaM3, 0.0f, MAX_FORCE);
+    }
 
-        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal0, directieRacheta, fortaM0, -1.0f); // Front Left
-        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal2, directieRacheta, fortaM2, 1.0f);  // Front Right
-        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal1, directieRacheta, fortaM3, 1.0f);  // Back Left
-        PhysicsEngine::getInstance().ApplyRocketForce(drone->physics_id, coltLocal3, directieRacheta, fortaM1, -1.0f); // Back Right
-
-        savePropellers(MAX_FORCE, fortaM0, fortaM1, fortaM2, fortaM3, coltLocal0, coltLocal1, coltLocal2, coltLocal3, targetQuat);
-
-        PhysicsEngine::getInstance().run();
-	}
-
+    float propRot = 0.0f;
     void renderPropellers(Shader& shader)
     {
+        propRot = propRot + 30.0f;
+        if (propRot > 3600.0f)
+            propRot = 0.0f;
+        glm::quat propeller_rotation = glm::angleAxis(glm::radians(propRot), glm::vec3(0.0f, 1.0f, 0.0f));
         propeler->move(propellers.coltLocal0); // M0
-        propeler->rotate_Q(drone->quaternion);
+        propeler->rotate_Q(drone->quaternion * propeller_rotation);
         propeler->scale(0.5);
         shader.setVec3("debugColor", glm::vec3(propellers.fortaM0 / propellers.MAX_FORCE, 0.0f, 0.0f));
         propeler->draw(shader);
 
         propeler->move(propellers.coltLocal1); // M3
-        propeler->rotate_Q(drone->quaternion);
+        propeler->rotate_Q(drone->quaternion * propeller_rotation);
         propeler->scale(0.5f);
         shader.setVec3("debugColor", glm::vec3(0.0f, propellers.fortaM3 / propellers.MAX_FORCE, 0.0f));
         propeler->draw(shader);
 
         propeler->move(propellers.coltLocal2); // M2 
-        propeler->rotate_Q(drone->quaternion);
+        propeler->rotate_Q(drone->quaternion * propeller_rotation);
         propeler->scale(0.5f);
         shader.setVec3("debugColor", glm::vec3(0.0f, 0.0f, propellers.fortaM2 / propellers.MAX_FORCE));
         propeler->draw(shader);
 
         propeler->move(propellers.coltLocal3); // M1 
-        propeler->rotate_Q(drone->quaternion);
+        propeler->rotate_Q(drone->quaternion * propeller_rotation);
         propeler->scale(0.5f);
         shader.setVec3("debugColor", glm::vec3(propellers.fortaM1 / propellers.MAX_FORCE, propellers.fortaM1 / propellers.MAX_FORCE, 0.0f));
         propeler->draw(shader);
 
-        primObj->move(glm::vec3(2.0f, 2.0f, -1.0f));
-        primObj->rotate_Q(propellers.quaternionDum);
+        /*primObj->move(glm::vec3(2.0f, 2.0f, -1.0f));
+        primObj->rotate_Q(drone->quaternion);
         propeler->scale(1.0f);
-        primObj->renderCube_shader(shader);
+        primObj->renderCube_shader(shader);*/
 
         imgui_helper->quatDebug = drone->quaternion;
     }
@@ -733,7 +708,7 @@ private:
         return glm::exp(-a * glm::pow(glm::abs(x), b));
     }
 
-    void savePropellers(float& MAX_FORCE, float& fortaM0, float& fortaM1, float& fortaM2, float& fortaM3, glm::vec3 coltLocal0, glm::vec3 coltLocal1, glm::vec3 coltLocal2, glm::vec3 coltLocal3, glm::quat quaternionDum)
+    void savePropellers(float MAX_FORCE, float& fortaM0, float& fortaM1, float& fortaM2, float& fortaM3, glm::vec3 coltLocal0, glm::vec3 coltLocal1, glm::vec3 coltLocal2, glm::vec3 coltLocal3, glm::quat quaternionDum)
     {
         propellers.MAX_FORCE = MAX_FORCE;
         propellers.fortaM0 = fortaM0; propellers.fortaM1 = fortaM1; propellers.fortaM2 = fortaM2; propellers.fortaM3 = fortaM3;

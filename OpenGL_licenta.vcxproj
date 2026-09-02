@@ -207,6 +207,8 @@
     <ClInclude Include="Thread_Pool.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="Transform.h" />
+    <ClInclude Include="VectorFieldHistogram.h" />
+    <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>

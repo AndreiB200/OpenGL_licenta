@@ -1,10 +1,5 @@
 
 #version 460 core
-//layout (location = 0) out vec4 FragColor;
-//layout (location = 1) out vec4 FragLinearDepth;
-//layout (location = 2) out vec4 FragPositionDepth;
-//layout (location = 3) out vec4 FragNormalRoughness;
-
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out float SaveDepth;
 
@@ -19,9 +14,6 @@ in vec2 TexCoords;
 
 uniform mat4 lightSpaceMatrix;
 
-//in vec3 WorldPos;
-//in vec3 Normal;
-
 
 // material parameters
 uniform vec3 u_albedo = vec3(0.7,0.7,0.7);
@@ -32,14 +24,6 @@ uniform float ao = 1.0;
 //uniform bool useAlpha = false;
 
 uniform vec3 emision;
-
-// material textures
-//uniform sampler2D albedoMap;
-//uniform sampler2D normalMap;
-//uniform sampler2D metallicMap;
-//uniform sampler2D roughnessMap;
-//uniform sampler2D alphaMap;
-//
 
 //textures or parameter switch
 uniform int textureSelect = 1;

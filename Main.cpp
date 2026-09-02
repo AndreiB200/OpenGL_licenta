@@ -771,7 +771,6 @@ int main()
         if (imgui_helper.droneCamera)
         {
             droneSim.cameraAnimation(models, projection, view, camPosition);
-            imgui_helper.cameraDebugPos = camPosition;
         }
 
         glm::mat4 inverseProj = glm::inverse(projection);
@@ -784,10 +783,6 @@ int main()
 
         glDepthFunc(GL_LEQUAL);
         ibl.drawBackground(view, projection);
-
-        glLineWidth(2.0f);
-        if (imgui_helper.physicsDebugRender)
-            PhysicsEngine::getInstance().drawDebug(view, projection);
 
         geometryShaderBuffer.use();
         geometryShaderBuffer.setMat4("view", view);
@@ -933,10 +928,11 @@ int main()
 
         imgui_helper.drawDebuggingState(gBuffer, WIDTH, HEIGHT, projection, view);
 
-        droneSim.drawCubesFromPoints(imgui_helper.noColorDebugShader);
-        droneSim.renderPropellers(imgui_helper.noColorDebugShader);
 
-        glDepthMask(GL_TRUE);
+        
+        droneSim.drawCubesFromPoints(imgui_helper.noColorDebugShader);
+        
+        droneSim.renderPropellers(imgui_helper.noColorDebugShader);
 
         droneSim.drawSensorData();
 
