@@ -225,6 +225,7 @@
     <None Include="cube_prefilter.frag" />
     <None Include="debug_shader.frag" />
     <None Include="debug_shader.vert" />
+    <None Include="distance_gradient.comp" />
     <None Include="fragment.frag" />
     <None Include="frame.frag" />
     <None Include="frame.vert" />
@@ -250,6 +251,7 @@
     <None Include="voxelGen.frag" />
     <None Include="voxelGen.geom" />
     <None Include="voxelGen.vert" />
+    <None Include="voxelize.comp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include=".gitignore.txt" />

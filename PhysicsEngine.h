@@ -652,18 +652,21 @@ public:
 		quat = glm::quat(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
 	}
 
-	void resetBody(JPH::BodyID bodyID, const JPH::RVec3& startPosition, const JPH::Quat& startRotation) 
+	void resetBody(JPH::BodyID bodyID, const JPH::RVec3& startPosition, const JPH::Quat& startRotation, bool body_dynamic = true)
 	{
 		JPH::BodyInterface& body_interface = physics_system.GetBodyInterface();
 		body_interface.SetPositionAndRotation(bodyID, startPosition, startRotation, JPH::EActivation::Activate);
 		{
-			JPH::BodyLockWrite lock(physics_system.GetBodyLockInterface(), bodyID);
-			if (lock.Succeeded())
+			if (body_dynamic)
 			{
-				JPH::Body& body = lock.GetBody();
-				body.ResetForce();
-				body.ResetTorque();
-				body.ResetMotion(); // Pune vitezele pe 0 în noua locatie
+				JPH::BodyLockWrite lock(physics_system.GetBodyLockInterface(), bodyID);
+				if (lock.Succeeded())
+				{
+					JPH::Body& body = lock.GetBody();
+					body.ResetForce();
+					body.ResetTorque();
+					body.ResetMotion();
+				}
 			}
 		}
 	}

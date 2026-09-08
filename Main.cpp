@@ -644,6 +644,13 @@ int main()
     human.scale(0.61f);
     human.move(10.0f, 0.0f, 6.0f);
 
+    Model pillar = Model("Models/Env/pillar.fbx", true);
+    pillar.buildTexture("Models/Env", "Models/Env/textures_floor.txt");
+    pillar.rotate_Q(glm::vec3(-90.0f, 0.0f, 0.0f));
+    pillar.move(0.0f, 6.0f, 30.0f);
+    pillar.applyPhysicsAABB();
+    pillar.applyPhysicsMatrix(true);
+
     //Model porsche = Model("Models/Porsche/porsche.fbx");
     //porsche.buildTexture("Models/Porsche", "Models/Porsche/textures.txt");
     ////porsche.textureAlpha = textures.texture2Dfile("Models/Porsche/BODY_alpha.png");
@@ -660,6 +667,7 @@ int main()
         &drone,
         &soldier,
         &human,
+        &pillar,
         //&porsche,
         //&propeler
     };
@@ -704,7 +712,6 @@ int main()
     imgui_helper.attachModels(models);
     imgui_helper.attach_newModel(newModel);
 
-    imgui_helper.setSlides();
     Gamepad gamepad = Gamepad();
     gamepad.bindDebugger(&imgui_helper);
 
@@ -721,10 +728,13 @@ int main()
 
     PrimitiveObj primObj;
     Drone droneSim = Drone(&myWindow, &drone, &propeler, &primObj, &imgui_helper);
+    droneSim.create9Pillars(pillar);
     droneSim.createCamera(WIDTH, HEIGHT);
     droneSim.sensorsAttach(WIDTH, HEIGHT);
 
     PhysicsEngine::getInstance().showBodyInfo(drone.physics_id);
+
+    imgui_helper.setSlides();
 
     while (!glfwWindowShouldClose(myWindow.window))
     {
@@ -807,6 +817,7 @@ int main()
         {
             for (int i = 0; i < models.size(); i++)
                 models[i]->draw(geometryShaderBuffer);
+            droneSim.render9morePillars(pillar, geometryShaderBuffer);
         }
 
         //---------------------------------------------------------
@@ -926,15 +937,13 @@ int main()
 
         renderColorAndDepth(myWindow, quadShader, view);
 
+
         imgui_helper.drawDebuggingState(gBuffer, WIDTH, HEIGHT, projection, view);
+        if (imgui_helper.physicsDebugRender)
+            PhysicsEngine::getInstance().drawDebug(view, projection);
 
+        droneSim.visualDebug(imgui_helper.noColorDebugShader);
 
-        
-        droneSim.drawCubesFromPoints(imgui_helper.noColorDebugShader);
-        
-        droneSim.renderPropellers(imgui_helper.noColorDebugShader);
-
-        droneSim.drawSensorData();
 
         
         if (glfwGetKey(myWindow.window, GLFW_KEY_0) == GLFW_PRESS) 

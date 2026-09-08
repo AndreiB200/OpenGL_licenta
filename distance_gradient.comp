@@ -1,0 +1,91 @@
+#version 460 core
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 1) buffer VoxelGrid {
+    uint voxelOccupancy[];
+};
+
+layout(std430, binding = 2) buffer QueryPoints {
+    vec4 queryPositions[];
+};
+
+struct DistanceGradientData {
+    float distance;
+    float _pad0;
+    vec2 _pad1;
+    vec4 gradient;
+};
+
+layout(std430, binding = 3) buffer ResultsOutput {
+    DistanceGradientData results[];
+};
+
+ 
+uniform int u_QueryCount;
+uniform float u_CellSize;
+uniform ivec3 u_GridDims;
+uniform vec3 u_GridOrigin;
+uniform float u_SearchRadiusWorld;
+
+bool isVoxelOccupied(ivec3 key) {
+    if (key.x < 0 || key.x >= u_GridDims.x ||
+        key.y < 0 || key.y >= u_GridDims.y ||
+        key.z < 0 || key.z >= u_GridDims.z) {
+        return false;
+    }
+    int idx = key.x + u_GridDims.x * (key.y + u_GridDims.y * key.z);
+    return voxelOccupancy[idx] > 0u;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= u_QueryCount) return;
+
+    vec3 posWorld = queryPositions[idx].xyz;
+
+    float minDist = u_SearchRadiusWorld;
+    vec3 accumulatedGradient = vec3(0.0);
+    float totalWeight = 0.0;
+    bool found = false;
+
+    ivec3 centerKey = ivec3(floor((posWorld - u_GridOrigin) / u_CellSize));
+    int searchRange = int(ceil(u_SearchRadiusWorld / u_CellSize));
+
+    for (int dx = -searchRange; dx <= searchRange; ++dx) {
+        for (int dy = -searchRange; dy <= searchRange; ++dy) {
+            for (int dz = -searchRange; dz <= searchRange; ++dz) {
+
+                ivec3 checkKey = centerKey + ivec3(dx, dy, dz);
+
+                if (isVoxelOccupied(checkKey)) {
+                    vec3 voxelCenter = u_GridOrigin + (vec3(checkKey) + vec3(0.5)) * u_CellSize;
+                    vec3 diff = posWorld - voxelCenter;
+                    float dist = length(diff);
+
+                    if (dist < u_SearchRadiusWorld) {
+                        found = true;
+                        if (dist < minDist) {
+                            minDist = dist;
+                        }
+
+                        if (dist > 0.0001) {
+                            float weight = pow(1.0 - (dist / u_SearchRadiusWorld), 2.0);
+                            accumulatedGradient += (diff / dist) * weight;
+                            totalWeight += weight;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    results[idx].distance = found ? minDist : u_SearchRadiusWorld;
+    
+    vec3 finalGrad = vec3(0.0);
+    if (found && totalWeight > 0.0001) {
+        finalGrad = normalize(accumulatedGradient);
+    }
+    
+    results[idx].gradient = vec4(finalGrad, 0.0);
+}

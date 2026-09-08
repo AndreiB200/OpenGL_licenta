@@ -1,0 +1,43 @@
+#version 460 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer PointCloudInput {
+    vec4 inPoints[];
+};
+
+layout(std430, binding = 1) buffer VoxelGrid {
+    uint voxelOccupancy[];
+};
+
+uniform int u_PointCount;
+uniform float u_CellSize;
+uniform ivec3 u_GridDims;
+uniform vec3 u_GridOrigin;
+uniform vec3 u_CameraPos;
+
+int pointToGridIndex(vec3 pt) {
+    ivec3 key = ivec3(floor((pt - u_GridOrigin) / u_CellSize));
+    
+    if (key.x < 0 || key.x >= u_GridDims.x ||
+        key.y < 0 || key.y >= u_GridDims.y ||
+        key.z < 0 || key.z >= u_GridDims.z) {
+        return -1;
+    }
+
+    return key.x + u_GridDims.x * (key.y + u_GridDims.y * key.z);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= u_PointCount) return;
+
+    vec3 pt = inPoints[idx].xyz;
+
+    if (length(pt - u_CameraPos) < 100.0) {
+        int gridIdx = pointToGridIndex(pt);
+        if (gridIdx != -1) {
+            atomicExchange(voxelOccupancy[gridIdx], 1u);
+        }
+    }
+}

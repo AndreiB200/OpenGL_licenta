@@ -2,8 +2,9 @@
 #ifdef _DRONE_
 
 #include <vector>
-#include "VectorFieldHistogram.h"
 #include "VoxelGrid.h"
+#include "VectorFieldHistogram.h"
+
 
 struct droneCamera
 {
@@ -31,6 +32,7 @@ public:
 
     std::vector<glm::vec3> LiDARpoints;
     LidarVoxelGrid lidarVoxelGrid;
+    //LidarVoxelGridGPU lidarVoxelGridGPU;
 
     Window* myWindow;
     Model* drone;
@@ -78,6 +80,7 @@ public:
     float positioning_X = 0.0f;
     float positioning_Z = 0.0f;
 
+    // ---  Control  --- 
     bool increaseRadians = false;
     void gamepadControl(Gamepad &gamepad)
     {
@@ -159,6 +162,7 @@ public:
         imgui_helper->droneTargetHeight = imgui_helper->targetPosition.y;
     }
 
+    //  --- Camera and Sensors --- 
     void createCamera(int WIDTH, int HEIGHT)
     {
         // Main front camera index [0]
@@ -174,7 +178,7 @@ public:
         glm::vec3 cameraUp = droneQuaternion * glm::vec3(0.0f, 1.0f, 0.0f);
 
         droneFrontCamera.view = glm::lookAt(cameraWorldPosition, dronePosition + (droneQuaternion * droneFrontCamera.viewLook), cameraUp);
-        droneFrontCamera.projection = glm::perspective(glm::radians(90.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+        droneFrontCamera.projection = glm::perspective(glm::radians(120.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
         cameras.push_back(droneFrontCamera);
     }
@@ -310,55 +314,6 @@ public:
     }
 
 
-
-    void drawCubesFromPoints(Shader &localShader)
-    {
-        glm::mat4 invProj = glm::inverse(cameras[0].projection);
-        glm::mat4 invView = glm::inverse(cameras[0].view);
-        primObj->scale(imgui_helper->cubeSizes);
-        localShader.setVec3("debugColor", glm::vec3(0.0f, 1.0f, 0.0f));
-
-        for (size_t i = 0; i < points.size(); ++i) {
-            float zView = points[i].value * imgui_helper->depth_far;
-            glm::vec4 clipPos = glm::vec4(points[i].ndcX, points[i].ndcY, 1.0f, 1.0f);
-            glm::vec4 viewTarget = invProj * clipPos;
-            viewTarget /= viewTarget.w;
-
-            glm::vec3 rayDir = glm::normalize(glm::vec3(viewTarget));
-
-            glm::vec3 viewPos = rayDir * (zView / -rayDir.z);
-
-            glm::vec3 worldPos = glm::vec3(invView * glm::vec4(viewPos, 1.0f));
-            LiDARpoints[i] = worldPos;
-            if (imgui_helper->drawPoints)
-            {
-                primObj->move(worldPos);
-                primObj->renderCube_shader(localShader);
-            }
-        }
-        
-        if (imgui_helper->drawVoxelGrid)
-        {
-            lidarVoxelGrid.addPoints(LiDARpoints, drone->position);
-            std::vector<glm::vec3> getVoxels = lidarVoxelGrid.getUniqueCenters();
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_int_distribution<size_t> dist(0, getVoxels.size() - 1);
-
-            for (int index = 0; index < 300; index++)
-            {
-                primObj->move(getVoxels[dist(gen)]);
-                primObj->renderCube_shader(localShader);
-            }
-
-            if (imgui_helper->sendVoxelsNetwork_button)
-            {
-                publisher.sendVoxelData(getVoxels);
-                imgui_helper->sendVoxelsNetwork_button = false;
-            }
-        }
-    }
-
     void depthProc(std::vector<float> &depthProc)
     {
         getUniformNDCPoints(depthProc);
@@ -407,14 +362,35 @@ public:
         isInitialized = true;
     }
     
-    glm::vec3 calculateAvoidanceVector(glm::vec3& actualPos, glm::vec3 &targetPos, glm::vec3 &forward) {
-        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::vec3 direction = vfhPlanner.computeSteeringDirection(actualPos, forward, up, targetPos, LiDARpoints);
-        imgui_helper->targetCollision = direction;
-        return direction;
-    }
     
-    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 angularVel, glm::vec3 &targetCollision, glm::vec3 &droneDirection, float &collisionYaw)
+    // --- Environment Test --- 
+    std::vector<JPH::BodyID> pillarPysicsIDs;
+    glm::quat pillarQuat;
+    void create9Pillars(Model &pillar)
+    {
+        pillarQuat = pillar.quaternion;
+        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
+        {
+            JPH::BodyID id = PhysicsEngine::getInstance().createBodyStatic(pillar.boundingBox.max, imgui_helper->pillarsPositions[i], pillar.quaternion);
+            pillarPysicsIDs.push_back(id);
+        }
+    }
+
+    void render9morePillars(Model& pillar, Shader &shader)
+    {
+        shader.setInt("textureSelect", 0);
+        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
+        {
+            pillar.move(imgui_helper->pillarsPositions[i]);
+            pillar.draw(shader);
+        }
+        shader.setInt("textureSelect", 1);
+
+    }
+
+
+    // --- Collision Avoidance Algorithm test --- APF, ~EGO-Planner, etc.
+    void collisionDetection(glm::vec3 &currentPos, glm::quat &currentQuat, glm::vec3 linearVel, glm::vec3 &targetPosition, glm::vec3 &droneDirection, float &collisionYaw)
     {
         goTo_X = +positioning_X + received_cmd.x;
         goTo_Z = +positioning_Z + received_cmd.z;
@@ -427,7 +403,7 @@ public:
         float MAX_SPEED = 5.0f;
         float distanceToObstacle = middlePoint * 100.0f;    imgui_helper->middlePointDebug = distanceToObstacle; // debug
 
-        float preventiveSpeed = 5.0f;
+        float preventiveSpeed = imgui_helper->safeSpeedDrone;
         
         // Direction crusing
         glm::vec3 forwardVec = glm::rotate(glm::normalize(currentQuat), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -444,35 +420,69 @@ public:
 
         glm::vec3 moveDirection;
         
-        static float smoothSpeed = 0.0f;
-        smoothSpeed = glm::mix(smoothSpeed, preventiveSpeed, 0.01f);
+        static float smoothSpeed = 20.0f;
+        //smoothSpeed = glm::mix(smoothSpeed, preventiveSpeed, 0.01f);
         moveDirection = (forwardVec * smoothSpeed * forwardPos) + (left_rightDirection * smoothSpeed * rightPos);
         
-        float saveY = targetCollision.y;
+        float saveY = targetPosition.y;
+        glm::vec3 saveTargetBefore = targetPosition;
+
         glm::vec3 vectorMovement = currentPos + moveDirection;
-        glm::vec3 saveTargetBefore = targetCollision;
 
-        if (std::abs(positioning_X) > 0.0f || std::abs(positioning_Z) > 0.0f)
-            targetCollision = vectorMovement;
-        else
-            targetCollision = targetCollision;
+        vectorMovement.y = saveY;
+        droneDirection = vectorMovement;
 
-        targetCollision.y = saveY;
-        glm::vec3 direction = glm::normalize(targetCollision - currentPos);
+        if(glm::length(targetPosition - currentPos) < 15.0f)
+            targetPosition = targetPosition + 0.1f * (forwardVec * forwardPos + left_rightDirection * rightPos);
+        targetPosition.y = saveY;
 
-        glm::vec3 vfhRes = vfhPlanner.computeAPFSteering(currentPos, targetPosition, LiDARpoints, 5.0f, 1.0f, 15.0f);
-        droneDirection = currentPos + vfhRes;
-        imgui_helper->targetCollision = vfhRes;
+        if (imgui_helper->startAvoidance)
+        {
+            float dt = PhysicsEngine::getInstance().getPhysicsStep();
+            std::vector<glm::vec3> segmentPoints;
+            //glm::vec3 vfhRes = vfhPlanner.computeAPFSteering(currentPos, targetPosition, LiDARpoints, imgui_helper->SENSITIVITY_size, 1.0f, imgui_helper->SENSITIVITY_repulsion);
+            //glm::vec3 vfhRes = vfhPlanner.liteEGO_Planner(currentPos, targetPosition, collisionYaw, LiDARpoints, segmentPoints, moveDirection, imgui_helper->learningRate, imgui_helper->SENSITIVITY_size, imgui_helper->SENSITIVITY_repulsion, dt);
+            glm::vec3 vfhRes = vfhPlanner.computeHybridAPF_EGOPlanner(currentPos, targetPosition, collisionYaw, lidarVoxelGrid, segmentPoints, glm::length(linearVel),
+                preventiveSpeed, imgui_helper->learningRate, imgui_helper->SENSITIVITY_size, imgui_helper->SENSITIVITY_repulsion, imgui_helper->smoothness);
+            //glm::vec3 vfhRes = vfhPlanner.optimizeBSplineEGO(currentPos, targetPosition, collisionYaw, lidarVoxelGridGPU, LiDARpoints, segmentPoints, 5.0f);
+
+            droneDirection = currentPos + vfhRes;
+
+            saveSimulationData(segmentPoints);
+        }
+
+        //droneDirection = targetPosition; // FORMULA NORMALA CORECTA !
+        
+        imgui_helper->targetCollision = glm::vec3(0.0f);
+    }
+
+    std::vector<glm::vec3> pointsToDraw;
+    void saveSimulationData(std::vector<glm::vec3> segmentPoints)
+    {
+        pointsToDraw = segmentPoints;
+    }
+    void drawSegmentLine(Shader &localShader)
+    {
+        localShader.setVec3("debugColor", glm::vec3(1.0f, 1.0f, 0.0f));
+        if (imgui_helper->startAvoidance)
+        {
+            for (auto const& point : pointsToDraw)
+            {
+                primObj->move(point);
+                primObj->renderCube_shader(localShader);
+            }
+        }
     }
 
 
+    // --- Flying logics and PIDs ---
     glm::vec3 targetPosition;
     float targetYawAngle;
     propellerData propellers;
     void flyDrone(Shader pbrShader)
 	{
         float dt = PhysicsEngine::getInstance().getPhysicsStep();
-        bool inteligenta_artificiala = imgui_helper->inteligenta_artificiala;
+        bool position_pid = imgui_helper->position_pid;
         targetYawAngle = currentYaw;
 
         if (imgui_helper->maxPower < 0.01f) imgui_helper->maxPower = 0.0f;
@@ -517,8 +527,8 @@ public:
 
         targetPosition = imgui_helper->targetPosition;
         glm::vec3 droneDirection;
-        collisionDetection(currentPosition, currentQuat, currentAngVel, imgui_helper->targetPosition, droneDirection, targetYawAngle);
-
+        collisionDetection(currentPosition, currentQuat, worldLinearVel, imgui_helper->targetPosition, droneDirection, targetYawAngle);
+        currentYaw = targetYawAngle;
         //processAiNetwork(targetPosition, targetYawAngle);
 
         float heightError;
@@ -537,7 +547,7 @@ public:
 
         fortaRacheta = std::clamp(fortaRacheta, imgui_helper->minPower, imgui_helper->getMaxPower());
 
-        if (inteligenta_artificiala) 
+        if (position_pid)
         {
             layerPositionPID(droneDirection, targetQuat, currentQuat, currentPosition, worldLinearVel);
         }
@@ -617,6 +627,8 @@ public:
         fortaM3 = std::clamp(fortaM3, 0.0f, MAX_FORCE);
     }
 
+
+    // ---  Visual DEBUG --- 
     float propRot = 0.0f;
     void renderPropellers(Shader& shader)
     {
@@ -656,6 +668,77 @@ public:
         imgui_helper->quatDebug = drone->quaternion;
     }
 
+    void drawCubesFromPoints(Shader& localShader)
+    {
+        glm::mat4 invProj = glm::inverse(cameras[0].projection);
+        glm::mat4 invView = glm::inverse(cameras[0].view);
+        primObj->scale(imgui_helper->cubeSizes);
+        localShader.setVec3("debugColor", glm::vec3(0.0f, 1.0f, 0.0f));
+
+        for (size_t i = 0; i < points.size(); ++i) {
+            float zView = points[i].value * imgui_helper->depth_far;
+            glm::vec4 clipPos = glm::vec4(points[i].ndcX, points[i].ndcY, 1.0f, 1.0f);
+            glm::vec4 viewTarget = invProj * clipPos;
+            viewTarget /= viewTarget.w;
+
+            glm::vec3 rayDir = glm::normalize(glm::vec3(viewTarget));
+
+            glm::vec3 viewPos = rayDir * (zView / -rayDir.z);
+
+            glm::vec3 worldPos = glm::vec3(invView * glm::vec4(viewPos, 1.0f));
+            LiDARpoints[i] = worldPos;
+            if (imgui_helper->drawPoints)
+            {
+                primObj->move(worldPos);
+                primObj->renderCube_shader(localShader);
+            }
+        }
+
+        saveVoxelsAndProcess(localShader);
+    }
+
+    void saveVoxelsAndProcess(Shader& localShader)
+    {
+        if (imgui_helper->readVoxelGrid)
+        {
+            std::vector<glm::vec3> lines = { drone->position };
+            lidarVoxelGrid.addPoints(LiDARpoints, drone->position);
+            if (imgui_helper->drawVoxelGrid)
+            {
+                std::vector<glm::vec3> getVoxels = lidarVoxelGrid.getUniqueCenters();
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_int_distribution<size_t> dist(0, getVoxels.size() - 1);
+
+                for (int index = 0; index < 300; index++)
+                {
+                    int localIndex = dist(gen);
+                    if (localIndex < 0 || localIndex >= getVoxels.size() || getVoxels.size() == 0)
+                        continue;
+                    primObj->move(getVoxels[localIndex]);
+                    primObj->renderCube_shader(localShader);
+                }
+            }
+
+            if (imgui_helper->time5sSend() && imgui_helper->sendVoxelsNetwork_button)
+            {
+                std::vector<glm::vec3> getVoxels = lidarVoxelGrid.getUniqueCenters();
+                publisher.sendVoxelData(getVoxels);
+                lidarVoxelGrid.clear();
+            }
+        }
+    }
+
+    void visualDebug(Shader& localShader)
+    {
+        drawCubesFromPoints(localShader);
+        renderPropellers(localShader);
+        drawSegmentLine(localShader);
+
+        drawSensorData();
+    }
+
+    // Network over other devices...
     void processAiNetwork(glm::vec3 &targetPosition, float &targetYaw)
     {
         if (received_cmd.flag == 1 && imgui_helper->remoteControl)
@@ -668,6 +751,10 @@ public:
     }
 
 private:
+    
+
+private:
+    // Mathematics...
     float MIN_ALPHA = 0.05f;  
     float MAX_ALPHA = 1.00f;  
     float NOISE_THRESHOLD = 0.05f;  
@@ -708,6 +795,7 @@ private:
         return glm::exp(-a * glm::pow(glm::abs(x), b));
     }
 
+    //  ---  Visual DEBUG --- private
     void savePropellers(float MAX_FORCE, float& fortaM0, float& fortaM1, float& fortaM2, float& fortaM3, glm::vec3 coltLocal0, glm::vec3 coltLocal1, glm::vec3 coltLocal2, glm::vec3 coltLocal3, glm::quat quaternionDum)
     {
         propellers.MAX_FORCE = MAX_FORCE;

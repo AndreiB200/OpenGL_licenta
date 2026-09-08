@@ -365,7 +365,7 @@ public:
         pub_socket_.send(message, zmq::send_flags::none);
     }
 
-    void start(const DronePose& pose_to_send, PythonCommand& cmd_to_receive, int pub_delay_ms = 20) {
+    void start(const DronePose& pose_to_send, PythonCommand& cmd_to_receive, int pub_delay_ms = 5) {
         if (is_running_) return;
 
         is_running_ = true;

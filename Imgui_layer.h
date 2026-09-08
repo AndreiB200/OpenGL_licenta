@@ -198,7 +198,62 @@ private:
 	std::string text = "";
 };
 
+class CollapsingHeader : public Widget {
+public:
+	CollapsingHeader(const char* _name, bool _defaultOpen = false)
+		: name(_name), defaultOpen(_defaultOpen) {
+	}
 
+	void addWidget(Widget* widget) {
+		children.push_back(widget);
+	}
+
+	void run() override {
+		ImGuiTreeNodeFlags flags = defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0;
+
+		if (ImGui::CollapsingHeader(name, flags)) {
+			for (size_t i = 0; i < children.size(); i++) {
+				ImGui::PushID(static_cast<int>(i));
+				children[i]->run();
+				ImGui::PopID();
+			}
+		}
+	}
+
+private:
+	const char* name;
+	bool defaultOpen;
+	std::vector<Widget*> children;
+};
+
+class TreeNode : public Widget {
+public:
+	TreeNode(const std::string& _name, bool _defaultOpen = false)
+		: name(_name), defaultOpen(_defaultOpen) {
+	}
+
+	void addWidget(Widget* widget) {
+		children.push_back(widget);
+	}
+
+	void run() override {
+		ImGuiTreeNodeFlags flags = defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0;
+		if (ImGui::TreeNodeEx(name.c_str(), flags)) 
+		{
+			for (size_t i = 0; i < children.size(); i++) {
+				ImGui::PushID(static_cast<int>(i));
+				children[i]->run();
+				ImGui::PopID();
+			}
+			ImGui::TreePop();
+		}
+	}
+
+private:
+	std::string name;
+	bool defaultOpen;
+	std::vector<Widget*> children;
+};
 
 
 class Imgui_layer
@@ -243,7 +298,7 @@ public:
 
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 460");
-		ImGui::StyleColorsDark();
+		ApplyModernStyle();
 	}
 
 	void ShutDown()
@@ -278,6 +333,56 @@ private:
 		ImGui::End();
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+
+	void ApplyModernStyle()
+	{
+		ImGuiStyle& style = ImGui::GetStyle();
+		ImVec4* colors = style.Colors;
+
+		style.WindowRounding = 8.0f;
+		style.ChildRounding = 6.0f; 
+		style.FrameRounding = 5.0f;
+		style.PopupRounding = 6.0f;
+		style.ScrollbarRounding = 8.0f;
+		style.GrabRounding = 4.0f;
+
+		style.WindowPadding = ImVec2(12.0f, 12.0f);
+		style.FramePadding = ImVec2(8.0f, 5.0f);
+		style.ItemSpacing = ImVec2(10.0f, 8.0f);
+		style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
+		style.IndentSpacing = 20.0f;
+		style.ScrollbarSize = 14.0f;
+		style.FrameBorderSize = 1.0f;
+
+		colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
+		colors[ImGuiCol_ChildBg] = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+		colors[ImGuiCol_PopupBg] = ImVec4(0.14f, 0.14f, 0.16f, 0.98f);
+		colors[ImGuiCol_Border] = ImVec4(0.24f, 0.24f, 0.27f, 0.50f);
+
+		colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
+		colors[ImGuiCol_TitleBgActive] = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+		colors[ImGuiCol_Header] = ImVec4(0.20f, 0.20f, 0.23f, 1.00f);
+		colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.28f, 0.33f, 1.00f);
+		colors[ImGuiCol_HeaderActive] = ImVec4(0.35f, 0.35f, 0.42f, 1.00f);
+
+		colors[ImGuiCol_FrameBg] = ImVec4(0.18f, 0.18f, 0.21f, 1.00f);
+		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.24f, 0.28f, 1.00f);
+		colors[ImGuiCol_FrameBgActive] = ImVec4(0.28f, 0.28f, 0.33f, 1.00f);
+
+		colors[ImGuiCol_CheckMark] = ImVec4(0.55f, 0.42f, 0.95f, 1.00f);
+		colors[ImGuiCol_SliderGrab] = ImVec4(0.45f, 0.35f, 0.85f, 1.00f);
+		colors[ImGuiCol_SliderGrabActive] = ImVec4(0.55f, 0.42f, 0.95f, 1.00f);
+
+		colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+		colors[ImGuiCol_ButtonHovered] = ImVec4(0.45f, 0.35f, 0.85f, 1.00f);
+		colors[ImGuiCol_ButtonActive] = ImVec4(0.55f, 0.42f, 0.95f, 1.00f);
+
+		colors[ImGuiCol_Text] = ImVec4(0.92f, 0.93f, 0.94f, 1.00f);
+		colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+		colors[ImGuiCol_ScrollbarBg] = ImVec4(0.08f, 0.08f, 0.09f, 0.50f);
+		colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.30f, 0.30f, 0.35f, 1.00f);
 	}
 
 	void getVRAM()

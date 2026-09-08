@@ -9,6 +9,44 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
+
+struct BSplineCubic {
+    glm::vec3 P0;
+    glm::vec3 P1;
+    glm::vec3 P2;
+    glm::vec3 P3;
+
+    glm::vec3 evaluate(float t) const {
+        float u = 1.0f - t;
+        float b0 = u * u * u;
+        float b1 = 3.0f * u * u * t;
+        float b2 = 3.0f * u * t * t;
+        float b3 = t * t * t;
+
+        return b0 * P0 + b1 * P1 + b2 * P2 + b3 * P3;
+    }
+    glm::vec3 velocity(float t) const {
+        float u = 1.0f - t;
+        return 3.0f * u * u * (P1 - P0) + 6.0f * u * t * (P2 - P1) + 3.0f * t * t * (P3 - P2);
+    }
+};
+
+
+struct BSplineQuadratic {
+    glm::vec3 P0;
+    glm::vec3 P1;
+    glm::vec3 P2;
+
+    glm::vec3 evaluate(float t) const {
+        float u = 1.0f - t;
+        float b0 = u * u;
+        float b1 = 2.0f * u * t;
+        float b2 = t * t;
+
+        return b0 * P0 + b1 * P1 + b2 * P2;
+    }
+};
+
 class VFHPlus3D {
 public:
     struct Config {
@@ -33,146 +71,144 @@ public:
     {
         m_histogram.resize(m_numAzimuth * m_numElevation, 0.0f);
     }
+   
 
-    glm::vec3 computeSteeringDirection(
-        const glm::vec3& currentPos,
-        const glm::vec3& forwardDir,
-        const glm::vec3& upDir,
+    glm::vec3 computeHybridAPF_EGOPlanner(
+        const glm::vec3& agentPos,
         const glm::vec3& targetPos,
-        const std::vector<glm::vec3>& lidarCloud)
-    {
-        std::fill(m_histogram.begin(), m_histogram.end(), 0.0f);
+        float& targetYaw,
+        LidarVoxelGrid &lidarVoxelGrid,
+        std::vector<glm::vec3>& splineSegment,
+        float actualSpeed = 4.0f,
+        float k_att = 5.0f,
+        float learningRate = 5.0f,
+        float d_max = 5.0f,
+        float k_rep = 20.0f,
+        float smoothness = 0.05f
+    ) {
+        const float a_max = actualSpeed;
+        const float stopThreshold = 1.0f;
 
-        float sectorRad = glm::radians(m_cfg.sectorSizeDeg);
-        float halfHFOV = glm::radians(m_cfg.horizontalFovDeg * 0.5f);
-        float halfVFOV = glm::radians(m_cfg.verticalFovDeg * 0.5f);
+        glm::vec3 dirToGlobalTarget = targetPos - agentPos;
+        float distToGlobalTarget = glm::length(dirToGlobalTarget);
 
-        glm::vec3 fwd = glm::normalize(forwardDir);
-        glm::vec3 right = glm::normalize(glm::cross(fwd, glm::normalize(upDir)));
-        glm::vec3 up = glm::cross(right, fwd);
-
-        for (const auto& ptWorld : lidarCloud) {
-            glm::vec3 relPt = ptWorld - currentPos;
-            float dist = glm::length(relPt);
-
-            if (dist <= 0.001f || dist > m_cfg.sensorMaxRadius) continue;
-
-            glm::vec3 normDir = relPt / dist;
-
-            float localZ = glm::dot(normDir, fwd);
-            float localX = glm::dot(normDir, right);
-            float localY = glm::dot(normDir, up);
-
-            if (localZ <= 0.0f) continue;
-
-            float azimuth = std::atan2(localX, localZ);
-            float elevation = std::asin(glm::clamp(localY, -1.0f, 1.0f));
-
-            if (std::abs(azimuth) > halfHFOV || std::abs(elevation) > halfVFOV) continue;
-
-            int azIdx = static_cast<int>((azimuth + halfHFOV) / sectorRad);
-            int elIdx = static_cast<int>((elevation + halfVFOV) / sectorRad);
-
-            azIdx = glm::clamp(azIdx, 0, m_numAzimuth - 1);
-            elIdx = glm::clamp(elIdx, 0, m_numElevation - 1);
-
-            float effectiveDist = std::max(0.1f, dist - m_cfg.safetyRadius);
-            float weight = 1.0f - (effectiveDist / m_cfg.sensorMaxRadius);
-            weight = std::max(0.0f, weight * weight);
-
-            int histIdx = elIdx * m_numAzimuth + azIdx;
-            m_histogram[histIdx] += weight;
+        if (distToGlobalTarget < stopThreshold) {
+            return glm::vec3(0.0f);
         }
+        dirToGlobalTarget = glm::normalize(dirToGlobalTarget);
 
-        glm::vec3 targetDirWorld = targetPos - currentPos;
-        float targetDist = glm::length(targetDirWorld);
-        if (targetDist < 0.001f) return fwd;
+        float d_thresh = d_max + (actualSpeed * actualSpeed) / (2.0f * a_max);
 
-        glm::vec3 targetDirNorm = targetDirWorld / targetDist;
+        float localHorizon = glm::clamp(d_thresh + 2.0f, 3.0f, distToGlobalTarget);
+        glm::vec3 localTarget = agentPos + dirToGlobalTarget * localHorizon;
 
-        float bestCost = std::numeric_limits<float>::max();
-        glm::vec3 bestDirectionWorld = fwd;
-        bool foundValidSector = false;
+        glm::vec3 defaultP1 = agentPos + (localTarget - agentPos) * (1.0f / 3.0f);
+        glm::vec3 defaultP2 = agentPos + (localTarget - agentPos) * (2.0f / 3.0f);
 
-        const float wTarget = 1.0f;
-        const float wForward = 0.4f;
-        const float wPrevDir = 0.3f;
+        glm::vec3 currentP1 = defaultP1;
+        glm::vec3 currentP2 = defaultP2;
+        glm::vec3 currentP3 = localTarget;
 
-        for (int el = 0; el < m_numElevation; ++el) {
-            for (int az = 0; az < m_numAzimuth; ++az) {
-                int idx = el * m_numAzimuth + az;
+        BSplineCubic spline = { agentPos, currentP1, currentP2, currentP3 };
 
-                if (m_histogram[idx] < m_cfg.densityThreshold) {
-                    float sectorAz = -halfHFOV + (az + 0.5f) * sectorRad;
-                    float sectorEl = -halfVFOV + (el + 0.5f) * sectorRad;
+        glm::vec3 forceP1(0.0f);
+        glm::vec3 forceP2(0.0f);
+        glm::vec3 forceP3(0.0f);
+        float weightP1Sum = 0.0f;
+        float weightP2Sum = 0.0f;
+        float weightP3Sum = 0.0f;
 
-                    glm::vec3 candidateDirLocal(
-                        std::sin(sectorAz) * std::cos(sectorEl),
-                        std::sin(sectorEl),
-                        std::cos(sectorAz) * std::cos(sectorEl)
-                    );
+        std::vector<glm::vec3> foundedPoints = lidarVoxelGrid.getUniqueCenters();
 
-                    glm::vec3 candidateDirWorld = glm::normalize(
-                        candidateDirLocal.x * right +
-                        candidateDirLocal.y * up +
-                        candidateDirLocal.z * fwd
-                    );
+        const int sampleCount = 15;
+        for (int i = 0; i <= sampleCount; ++i)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(sampleCount);
+            if (t < 0.1f || t > 1.0f) continue;
 
-                    float targetCost = 1.0f - glm::dot(candidateDirWorld, targetDirNorm);
-                    float forwardCost = 1.0f - glm::dot(candidateDirWorld, fwd);
-                    float prevDirCost = 1.0f - glm::dot(candidateDirWorld, m_lastSelectedDir);
+            glm::vec3 ptOnCurve = spline.evaluate(t);
 
-                    float cost = wTarget * targetCost + wForward * forwardCost + wPrevDir * prevDirCost;
+            float w1 = 3.0f * (1.0f - t) * (1.0f - t) * t;
+            float w2 = 3.0f * (1.0f - t) * t * t;
+            float w3 = t* t* t;
 
-                    if (cost < bestCost) {
-                        bestCost = cost;
-                        bestDirectionWorld = candidateDirWorld;
-                        foundValidSector = true;
-                    }
+            for (const auto& obsPt : foundedPoints)
+            {
+                glm::vec3 diff = ptOnCurve - obsPt;
+                float dist = glm::length(diff);
+
+                if (dist < d_thresh && dist > 0.001f)
+                {
+                    glm::vec3 dir = glm::normalize(diff);
+                    float penetration = d_thresh - dist;
+
+                    glm::vec3 egoForce = dir * penetration;
+
+                    forceP1 += egoForce * w1;
+                    forceP2 += egoForce * w2;
+                    forceP3 += egoForce * w3;
+
+                    weightP1Sum += w1;
+                    weightP2Sum += w2;
+                    weightP3Sum += w3;
                 }
             }
         }
 
-        if (!foundValidSector) {
-            m_lastSelectedDir = bestDirectionWorld;
+        if (weightP1Sum > 0.001f) {
+            currentP1 += (forceP1 / weightP1Sum) * learningRate;
+        }
+        if (weightP2Sum > 0.001f) {
+            currentP2 += (forceP2 / weightP2Sum) * learningRate;
+        }
+        if (weightP2Sum > 0.001f) {
+            currentP3 += (forceP3 / weightP3Sum) * learningRate;
         }
 
-        //publisher->sendHistogram(m_histogram); // This will be rechecked later
+        spline.P1 = currentP1;
+        spline.P2 = currentP2;
+        spline.P3 = currentP3;
 
-        return bestDirectionWorld;
+        float t_lookahead = 0.25f;
+        glm::vec3 targetWayPoint = spline.evaluate(t_lookahead);
+
+        glm::vec3 moveDirection = targetWayPoint - agentPos;
+        float moveLen = glm::length(moveDirection);
+
+        if (moveLen > 0.001f) {
+            moveDirection = glm::normalize(moveDirection) * k_att;
+            targetYaw = std::atan2(moveDirection.x, moveDirection.z);
+        }
+        else {
+            moveDirection = glm::vec3(0.0f);
+        }
+
+        splineSegment = generateSplineVertices(spline);
+
+        return moveDirection;
     }
 
-    glm::vec3 computeAPFSteering(
-        const glm::vec3& agentPos,         
-        const glm::vec3& targetPos,       
-        const std::vector<glm::vec3>& lidarPointsWorld, 
-        float d_max = 2.5f,                      
-        float k_att = 2.0f,                      
-        float k_rep = 5.0f                      
-    ) {
-        glm::vec3 f_att = k_att * (targetPos - agentPos);
-
-        float max_att_force = 5.0f;
-        if (glm::length(f_att) > max_att_force) {
-            f_att = glm::normalize(f_att) * max_att_force;
+    std::vector<glm::vec3> generateSplineVertices(BSplineCubic& spline)
+    {
+        std::vector<glm::vec3> segmentPoints;
+        for (int i = 0; i < 50; i++)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(50);
+            segmentPoints.push_back(spline.evaluate(t));
         }
 
-        glm::vec3 f_rep = glm::vec3(0.0f);
-
-        for (const auto& pointWorld : lidarPointsWorld) {
-            glm::vec3 diff = agentPos - pointWorld;
-            float dist = glm::length(diff);
-
-            if (dist < d_max && dist > 0.001f) {
-                glm::vec3 dir = glm::normalize(diff);
-                float factor = k_rep * ((1.0f / dist) - (1.0f / d_max)) * (1.0f / (dist * dist));
-                f_rep += factor * dir;
-            }
+        return segmentPoints;
+    }
+    std::vector<glm::vec3> generateSplineVertices(BSplineQuadratic& spline)
+    {
+        std::vector<glm::vec3> segmentPoints;
+        for (int i = 0; i < 50; i++)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(50);
+            segmentPoints.push_back(spline.evaluate(t));
         }
 
-        glm::vec3 f_total = f_att + f_rep;
-
-        return f_total;
+        return segmentPoints;
     }
 
 private:

@@ -78,6 +78,9 @@
     <Filter Include="Header Files\Drone Classes">
       <UniqueIdentifier>{1f37a2aa-5176-4baa-96ed-6fe21e9eff48}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\ComputeShaders">
+      <UniqueIdentifier>{1f993a3d-855b-454d-88ee-db7e760977e9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="glad.c">
@@ -336,6 +339,12 @@
     </None>
     <None Include="debug_shader.frag">
       <Filter>Shaders\Debugging\debug_shader</Filter>
+    </None>
+    <None Include="voxelize.comp">
+      <Filter>Shaders\ComputeShaders</Filter>
+    </None>
+    <None Include="distance_gradient.comp">
+      <Filter>Shaders\ComputeShaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

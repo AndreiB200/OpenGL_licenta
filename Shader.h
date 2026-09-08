@@ -101,6 +101,42 @@ public:
             glDeleteShader(geometry);
     }
     
+    Shader(const char* compShader)
+    {
+        std::string computeCode;
+        std::ifstream cShaderFile;
+        cShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        try
+        {
+            cShaderFile.open(compShader);
+            std::stringstream cShaderStream;
+
+            cShaderStream << cShaderFile.rdbuf();
+            cShaderFile.close();
+
+            computeCode = cShaderStream.str();
+        }
+        catch (std::ifstream::failure& e)
+        {
+            std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ: " << e.what() << std::endl;
+        }
+        const char* cShaderCode = computeCode.c_str();
+        unsigned int compute;
+
+        compute = glCreateShader(GL_COMPUTE_SHADER);
+        glShaderSource(compute, 1, &cShaderCode, NULL);
+        glCompileShader(compute);
+        checkCompileErrors(compute, "COMPUTE");
+
+        ID = glCreateProgram();
+        glAttachShader(ID, compute);
+
+        glLinkProgram(ID);
+        checkCompileErrors(ID, "PROGRAM");
+
+        glDeleteShader(compute);
+    }
+
     void use()
     {
         glUseProgram(ID);
@@ -129,6 +165,11 @@ public:
     void setVec3(const std::string& name, const glm::vec3& value) const
     {
         glUniform3fv(glGetUniformLocation(ID, name.c_str()), 1, &value[0]);
+    }
+
+    void setVec3i(const std::string& name, const glm::ivec3& value) const
+    {
+        glUniform3iv(glGetUniformLocation(ID, name.c_str()), 1, &value[0]);
     }
 
     void setMat3(const std::string& name, glm::mat3& mat) const
