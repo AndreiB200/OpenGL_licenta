@@ -87,7 +87,7 @@ public:
         float smoothness = 0.05f
     ) {
         const float a_max = actualSpeed;
-        const float stopThreshold = 1.0f;
+        const float stopThreshold = 4.0f;
 
         glm::vec3 dirToGlobalTarget = targetPos - agentPos;
         float distToGlobalTarget = glm::length(dirToGlobalTarget);
@@ -95,11 +95,45 @@ public:
         if (distToGlobalTarget < stopThreshold) {
             return glm::vec3(0.0f);
         }
+
+        std::vector<glm::vec3> foundedPoints = lidarVoxelGrid.getUniqueCenters();
+
         dirToGlobalTarget = glm::normalize(dirToGlobalTarget);
 
         float d_thresh = d_max + (actualSpeed * actualSpeed) / (2.0f * a_max);
 
-        float localHorizon = glm::clamp(d_thresh + 2.0f, 3.0f, distToGlobalTarget);
+        float localHorizon = glm::clamp(d_thresh + 2.0f, 2.0f, 10.0f);
+
+        float minHitDist = localHorizon;
+        const float voxelRadius = 0.0f;
+
+        for (const auto& obsPt : foundedPoints)
+        {
+            glm::vec3 toObs = obsPt - agentPos;
+
+            float projDist = glm::dot(toObs, dirToGlobalTarget);
+
+            if (projDist > 0.0f && projDist < localHorizon)
+            {
+                glm::vec3 closestPointOnRay = agentPos + dirToGlobalTarget * projDist;
+                float perpendicularDist = glm::length(obsPt - closestPointOnRay);
+
+                if (perpendicularDist < voxelRadius)
+                {
+                    float hitDist = projDist - voxelRadius;
+
+                    if (hitDist < minHitDist) {
+                        minHitDist = hitDist;
+                    }
+                }
+            }
+        }
+
+        if (minHitDist < localHorizon) {
+            const float d_margin = 0.8f;
+            localHorizon = std::max(0.5f, minHitDist - d_margin);
+        }
+
         glm::vec3 localTarget = agentPos + dirToGlobalTarget * localHorizon;
 
         glm::vec3 defaultP1 = agentPos + (localTarget - agentPos) * (1.0f / 3.0f);
@@ -116,18 +150,15 @@ public:
         glm::vec3 forceP3(0.0f);
         float weightP1Sum = 0.0f;
         float weightP2Sum = 0.0f;
-        float weightP3Sum = 0.0f;
+        float weightP3Sum = 0.0f;       
 
-        std::vector<glm::vec3> foundedPoints = lidarVoxelGrid.getUniqueCenters();
-
-        const int sampleCount = 15;
+        const int sampleCount = 20;
         for (int i = 0; i <= sampleCount; ++i)
         {
             float t = static_cast<float>(i) / static_cast<float>(sampleCount);
-            if (t < 0.1f || t > 1.0f) continue;
+           
 
             glm::vec3 ptOnCurve = spline.evaluate(t);
-
             float w1 = 3.0f * (1.0f - t) * (1.0f - t) * t;
             float w2 = 3.0f * (1.0f - t) * t * t;
             float w3 = t* t* t;
@@ -142,12 +173,12 @@ public:
                     glm::vec3 dir = glm::normalize(diff);
                     float penetration = d_thresh - dist;
 
-                    glm::vec3 egoForce = dir * penetration;
+                    glm::vec3 egoForce = dir * penetration * penetration;
 
                     forceP1 += egoForce * w1;
                     forceP2 += egoForce * w2;
                     forceP3 += egoForce * w3;
-
+                    
                     weightP1Sum += w1;
                     weightP2Sum += w2;
                     weightP3Sum += w3;
@@ -155,13 +186,14 @@ public:
             }
         }
 
+        
         if (weightP1Sum > 0.001f) {
             currentP1 += (forceP1 / weightP1Sum) * learningRate;
         }
         if (weightP2Sum > 0.001f) {
             currentP2 += (forceP2 / weightP2Sum) * learningRate;
         }
-        if (weightP2Sum > 0.001f) {
+        if (weightP3Sum > 0.001f) {
             currentP3 += (forceP3 / weightP3Sum) * learningRate;
         }
 
@@ -191,9 +223,9 @@ public:
     std::vector<glm::vec3> generateSplineVertices(BSplineCubic& spline)
     {
         std::vector<glm::vec3> segmentPoints;
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 10; i++)
         {
-            float t = static_cast<float>(i) / static_cast<float>(50);
+            float t = static_cast<float>(i) / static_cast<float>(10);
             segmentPoints.push_back(spline.evaluate(t));
         }
 

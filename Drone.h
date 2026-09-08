@@ -362,31 +362,6 @@ public:
         isInitialized = true;
     }
     
-    
-    // --- Environment Test --- 
-    std::vector<JPH::BodyID> pillarPysicsIDs;
-    glm::quat pillarQuat;
-    void create9Pillars(Model &pillar)
-    {
-        pillarQuat = pillar.quaternion;
-        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
-        {
-            JPH::BodyID id = PhysicsEngine::getInstance().createBodyStatic(pillar.boundingBox.max, imgui_helper->pillarsPositions[i], pillar.quaternion);
-            pillarPysicsIDs.push_back(id);
-        }
-    }
-
-    void render9morePillars(Model& pillar, Shader &shader)
-    {
-        shader.setInt("textureSelect", 0);
-        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
-        {
-            pillar.move(imgui_helper->pillarsPositions[i]);
-            pillar.draw(shader);
-        }
-        shader.setInt("textureSelect", 1);
-
-    }
 
 
     // --- Collision Avoidance Algorithm test --- APF, ~EGO-Planner, etc.
@@ -420,7 +395,7 @@ public:
 
         glm::vec3 moveDirection;
         
-        static float smoothSpeed = 20.0f;
+        static float smoothSpeed = 10.0f;
         //smoothSpeed = glm::mix(smoothSpeed, preventiveSpeed, 0.01f);
         moveDirection = (forwardVec * smoothSpeed * forwardPos) + (left_rightDirection * smoothSpeed * rightPos);
         
@@ -436,15 +411,12 @@ public:
             targetPosition = targetPosition + 0.1f * (forwardVec * forwardPos + left_rightDirection * rightPos);
         targetPosition.y = saveY;
 
+        glm::vec3 vfhRes = glm::vec3(0.0f);
         if (imgui_helper->startAvoidance)
         {
-            float dt = PhysicsEngine::getInstance().getPhysicsStep();
             std::vector<glm::vec3> segmentPoints;
-            //glm::vec3 vfhRes = vfhPlanner.computeAPFSteering(currentPos, targetPosition, LiDARpoints, imgui_helper->SENSITIVITY_size, 1.0f, imgui_helper->SENSITIVITY_repulsion);
-            //glm::vec3 vfhRes = vfhPlanner.liteEGO_Planner(currentPos, targetPosition, collisionYaw, LiDARpoints, segmentPoints, moveDirection, imgui_helper->learningRate, imgui_helper->SENSITIVITY_size, imgui_helper->SENSITIVITY_repulsion, dt);
-            glm::vec3 vfhRes = vfhPlanner.computeHybridAPF_EGOPlanner(currentPos, targetPosition, collisionYaw, lidarVoxelGrid, segmentPoints, glm::length(linearVel),
+            vfhRes = vfhPlanner.computeHybridAPF_EGOPlanner(currentPos, targetPosition, collisionYaw, lidarVoxelGrid, segmentPoints, glm::length(linearVel),
                 preventiveSpeed, imgui_helper->learningRate, imgui_helper->SENSITIVITY_size, imgui_helper->SENSITIVITY_repulsion, imgui_helper->smoothness);
-            //glm::vec3 vfhRes = vfhPlanner.optimizeBSplineEGO(currentPos, targetPosition, collisionYaw, lidarVoxelGridGPU, LiDARpoints, segmentPoints, 5.0f);
 
             droneDirection = currentPos + vfhRes;
 
@@ -453,25 +425,6 @@ public:
 
         //droneDirection = targetPosition; // FORMULA NORMALA CORECTA !
         
-        imgui_helper->targetCollision = glm::vec3(0.0f);
-    }
-
-    std::vector<glm::vec3> pointsToDraw;
-    void saveSimulationData(std::vector<glm::vec3> segmentPoints)
-    {
-        pointsToDraw = segmentPoints;
-    }
-    void drawSegmentLine(Shader &localShader)
-    {
-        localShader.setVec3("debugColor", glm::vec3(1.0f, 1.0f, 0.0f));
-        if (imgui_helper->startAvoidance)
-        {
-            for (auto const& point : pointsToDraw)
-            {
-                primObj->move(point);
-                primObj->renderCube_shader(localShader);
-            }
-        }
     }
 
 
@@ -627,8 +580,49 @@ public:
         fortaM3 = std::clamp(fortaM3, 0.0f, MAX_FORCE);
     }
 
+    // --- Environment Test --- 
+    std::vector<JPH::BodyID> pillarPysicsIDs;
+    glm::quat pillarQuat;
+    void create9Pillars(Model& pillar)
+    {
+        pillarQuat = pillar.quaternion;
+        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
+        {
+            JPH::BodyID id = PhysicsEngine::getInstance().createBodyStatic(pillar.boundingBox.max, imgui_helper->pillarsPositions[i], pillar.quaternion);
+            pillarPysicsIDs.push_back(id);
+        }
+    }
+
+    void render9morePillars(Model& pillar, Shader& shader)
+    {
+        shader.setInt("textureSelect", 0);
+        for (int i = 0; i < imgui_helper->pillarsPositions.size(); i++)
+        {
+            pillar.move(imgui_helper->pillarsPositions[i]);
+            pillar.draw(shader);
+        }
+        shader.setInt("textureSelect", imgui_helper->textureSelect);
+    }
 
     // ---  Visual DEBUG --- 
+    std::vector<glm::vec3> pointsToDraw;
+    void saveSimulationData(std::vector<glm::vec3> segmentPoints)
+    {
+        pointsToDraw = segmentPoints;
+    }
+    void drawSegmentLine(Shader& localShader)
+    {
+        localShader.setVec3("debugColor", glm::vec3(1.0f, 1.0f, 0.0f));
+        if (imgui_helper->showSpline)
+        {
+            for (auto const& point : pointsToDraw)
+            {
+                primObj->move(point);
+                primObj->renderCube_shader(localShader);
+            }
+        }
+    }
+
     float propRot = 0.0f;
     void renderPropellers(Shader& shader)
     {
@@ -710,7 +704,7 @@ public:
                 std::mt19937 gen(rd());
                 std::uniform_int_distribution<size_t> dist(0, getVoxels.size() - 1);
 
-                for (int index = 0; index < 300; index++)
+                for (int index = 0; index < 100; index++)
                 {
                     int localIndex = dist(gen);
                     if (localIndex < 0 || localIndex >= getVoxels.size() || getVoxels.size() == 0)

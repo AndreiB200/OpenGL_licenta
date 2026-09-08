@@ -163,10 +163,11 @@ public:
     
     // Algorithm settings
     float MIN_ALPHA = 0.8f, MAX_ALPHA = 1.0f, NOISE_THRESHOLD = 0.001f, JUMP_THRESHOLD = 0.001f;
-    float SENSITIVITY_size = 5.0f;
+    float SENSITIVITY_size = 5.8f;
     float SENSITIVITY_repulsion = 20.0f;
     float smoothness = 0.01;
-    float safeSpeedDrone = 1.0f;
+    float safeSpeedDrone = 4.0f;
+    bool showSpline = true;
 
     // Ai variables
     bool position_pid = false;
@@ -177,7 +178,7 @@ public:
     float cubeSizes = 0.03;
     float angularVel = 0.0f;
     bool startAvoidance = true;
-    float learningRate = 5.0f;
+    float learningRate = 2.5f;
 
     // Voxels data
     bool drawPoints = false;
@@ -229,6 +230,7 @@ public:
         obstacleAvoidance->addWidget(new CheckBox("Activate position control", &position_pid));
         obstacleAvoidance->addWidget(new CheckBox("Start Avoidance", &startAvoidance));
         obstacleAvoidance->addWidget(new CheckBox("Remote controll Ai", &remoteControl));
+        obstacleAvoidance->addWidget(new CheckBox("Show Spline", &showSpline));
 
         TreeNode* sensitivityNode = new TreeNode("Sensitivity and Learning Rate");
         sensitivityNode->addWidget(new DragFloat("Learning Rate", &learningRate, 0.01f));

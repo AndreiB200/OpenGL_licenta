@@ -766,7 +766,7 @@ int main()
 
         droneSim.gamepadControl(gamepad);
         if (imgui_helper.startMotors) {
-            for (int i = 0; i < 9; i++)
+            for (int i = 0; i < 4; i++)
             {
                 droneSim.flyDrone(geometryShaderBuffer);
             }

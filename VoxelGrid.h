@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <queue>
 #include <cmath>
+#include <unordered_set>
 
 struct VoxelKey {
     int x, y, z;
@@ -20,26 +21,42 @@ struct VoxelKey {
     }
 };
 
-struct DistanceGradient {
-    float distance;
-    glm::vec3 gradient;
+
+struct VoxelKeyHash {
+    std::size_t operator()(const VoxelKey& k) const {
+        // Hash simplu și rapid pe 64-bit pentru coordonate 3D
+        std::size_t h1 = std::hash<int>{}(k.x);
+        std::size_t h2 = std::hash<int>{}(k.y);
+        std::size_t h3 = std::hash<int>{}(k.z);
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
+    }
 };
 
 class LidarVoxelGrid {
 private:
     float cellSize;
+    int max_capacity;
+
     std::vector<VoxelKey> occupiedVoxels;
+    std::vector<glm::vec3> cachedCenters;
+
+    std::unordered_set<VoxelKey, VoxelKeyHash> voxelLookup;
 
     std::queue<std::vector<VoxelKey>> voxelsQueue;
 
-    bool contains(const VoxelKey& key) const {
-        auto it = std::lower_bound(occupiedVoxels.begin(), occupiedVoxels.end(), key);
-        return (it != occupiedVoxels.end() && *it == key);
+    glm::vec3 keyToCenter(const VoxelKey& key) const {
+        return glm::vec3(
+            (key.x + 0.5f) * cellSize,
+            (key.y + 0.5f) * cellSize,
+            (key.z + 0.5f) * cellSize
+        );
     }
 
 public:
-    LidarVoxelGrid(float size = 2.0f) : cellSize(size) {
-        occupiedVoxels.reserve(1000);
+    LidarVoxelGrid(float size = 2.0f, int _max_capacity = 512) : cellSize(size), max_capacity(_max_capacity) {
+        occupiedVoxels.reserve(max_capacity);
+        cachedCenters.assign(max_capacity, glm::vec3(0.0f));
+        voxelLookup.reserve(max_capacity);
     }
 
     VoxelKey pointToKey(const glm::vec3& point) const {
@@ -50,29 +67,37 @@ public:
         };
     }
 
-    float getCellSize() const {
-        return cellSize;
+    float getCellSize() const { return cellSize; }
+
+    void changePointCache(const glm::vec3& point)
+    {
+        static int i = 0;
+        cachedCenters[i % max_capacity] = point;
+        i++;
+        if (i >= max_capacity) i = 0;
     }
 
     void addPoint(const glm::vec3& point) {
         VoxelKey key = pointToKey(point);
-        auto it = std::lower_bound(occupiedVoxels.begin(), occupiedVoxels.end(), key);
 
-        if (it == occupiedVoxels.end() || !(*it == key)) {
-            occupiedVoxels.insert(it, key);
+        if (voxelLookup.insert(key).second) {
+            occupiedVoxels.push_back(key);
+            changePointCache(keyToCenter(key));
         }
     }
 
     void addPoints(const std::vector<glm::vec3>& points, glm::vec3 cameraPos) {
         for (const auto& pt : points) {
-            if (glm::length(pt - cameraPos) < 25.0f) {
+            if (glm::length(pt - cameraPos) < 15.0f) {
                 addPoint(pt);
             }
         }
-        
-        if (occupiedVoxels.size() > 512) {
+
+        if (occupiedVoxels.size() > max_capacity) {
             voxelsQueue.push(occupiedVoxels);
+
             occupiedVoxels.clear();
+            voxelLookup.clear();
         }
 
         if (voxelsQueue.size() > 5) {
@@ -80,26 +105,13 @@ public:
         }
     }
 
-    bool isOccupied(const glm::vec3& point) const {
-        return contains(pointToKey(point));
-    }
-
-    std::vector<glm::vec3> getUniqueCenters() const {
-        std::vector<glm::vec3> centers;
-        centers.reserve(occupiedVoxels.size());
-
-        for (const auto& key : occupiedVoxels) {
-            centers.emplace_back(
-                (key.x + 0.5f) * cellSize,
-                (key.y + 0.5f) * cellSize,
-                (key.z + 0.5f) * cellSize
-            );
-        }
-        return centers;
+    const std::vector<glm::vec3>& getUniqueCenters() const {
+        return cachedCenters;
     }
 
     void clear() {
         occupiedVoxels.clear();
+        voxelLookup.clear();
     }
 };
 

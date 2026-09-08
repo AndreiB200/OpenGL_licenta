@@ -439,7 +439,7 @@ struct PIDController {
 	}
 };
 
-PIDController pidPitch{ 3.1f, 0.2f, 0.62f };
+PIDController pidPitch{ 3.1f, 0.2f, 0.2f };
 PIDController pidRoll{ 1.8f, 0.2f, 0.30f };
 PIDController pidYaw{ 2.0f, 0.1f, 1.2f };
 PIDController pidHeight{ 11.2f, 2.5f, 18.4f };
@@ -755,7 +755,7 @@ private:
 		JPH::RegisterTypes();
 	}
 	
-	const float physicsTimeStep = 1.0f / 400.0f;
+	const float physicsTimeStep = 1.0f / 200.0f;
 	
 	// System
 	JPH::PhysicsSystem physics_system;
