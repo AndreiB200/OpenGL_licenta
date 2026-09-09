@@ -412,30 +412,35 @@ struct PIDController {
 
 	float integral = 0.0f;
 
-	// varianta optimizată pentru D bazat pe Gyro/AngVel
+	float p_term = 0.0f;
+	float i_term = 0.0f;
+	float d_term = 0.0f;
+	float lastError = 0.0f;
+	float lastOutput = 0.0f;
+
 	float Update(float error, float velocity, float dt, float maxTorque = 50.0f) {
-		// 1. Protecție împotriva dt invalid (dacă framerate-ul pică sau e pasul 0)
 		if (dt <= 0.00001f) return 0.0f;
 
-		// 2. Integrator cu Anti-Windup
 		integral += error * dt;
 		integral = glm::clamp(integral, -maxTorque, maxTorque);
 
-		// 3. Calcul P, I, D
-		float P = error * kp;
-		float I = integral * ki;
+		p_term = error * kp;
+		i_term = integral * ki;
+		d_term = -velocity * kd;
 
-		// D se opune vitezei de rotație (se pune cu MINUS)
-		float D = -velocity * kd;
+		lastError = error;
+		lastOutput = glm::clamp(p_term + i_term + d_term, -maxTorque, maxTorque);
 
-		float output = P + I + D;
-
-		// 4. Clamping pe ieșirea totală pentru siguranță în Jolt
-		return glm::clamp(output, -maxTorque, maxTorque);
+		return lastOutput;
 	}
 
 	void Reset() {
 		integral = 0.0f;
+		p_term = 0.0f;
+		i_term = 0.0f;
+		d_term = 0.0f;
+		lastError = 0.0f;
+		lastOutput = 0.0f;
 	}
 };
 

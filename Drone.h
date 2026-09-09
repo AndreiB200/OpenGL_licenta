@@ -729,7 +729,7 @@ public:
         renderPropellers(localShader);
         drawSegmentLine(localShader);
 
-        drawSensorData();
+        //drawSensorData();
     }
 
     // Network over other devices...

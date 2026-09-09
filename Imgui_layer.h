@@ -255,6 +255,64 @@ private:
 	std::vector<Widget*> children;
 };
 
+class PIDDebuggerWidget : public Widget {
+public:
+	static constexpr size_t HISTORY_SIZE = 100;
+
+	PIDDebuggerWidget(const std::string& label, const PIDController* pid, float maxTorque = 50.0f, float _y_Size = 60.0f)
+		: label(label), pidPtr(pid), maxTorque(maxTorque),
+		historyError(HISTORY_SIZE, 0.0f),
+		historyP(HISTORY_SIZE, 0.0f),
+		historyI(HISTORY_SIZE, 0.0f),
+		historyD(HISTORY_SIZE, 0.0f),
+		historyTorque(HISTORY_SIZE, 0.0f),
+		y_Size(_y_Size){
+	}
+
+	void run() override {
+		if (!pidPtr) return;
+
+		ImGui::Text(label.c_str());
+		historyError[offset] = pidPtr->lastError;
+		historyP[offset] = pidPtr->p_term;
+		historyI[offset] = pidPtr->i_term;
+		historyD[offset] = pidPtr->d_term;
+		historyTorque[offset] = pidPtr->lastOutput;
+
+		offset = (offset + 1) % HISTORY_SIZE;
+
+		ImGui::PushID(label.c_str());
+		ImGui::PlotLines("Error data", historyError.data(), (int)HISTORY_SIZE, offset, nullptr, -3.14f, 3.14f, ImVec2(0, y_Size));
+
+		ImGui::Separator();
+		ImGui::Text("Components:");
+		ImGui::PlotLines("P", historyP.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
+		ImGui::PlotLines("I", historyI.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
+		ImGui::PlotLines("D", historyD.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
+
+		ImGui::Separator();
+		ImGui::PlotLines("Torque Output", historyTorque.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
+		ImGui::Separator();
+
+		ImGui::Text("Integral Accumulator: %.3f", pidPtr->integral);
+		ImGui::Text("Last Output:          %.3f", pidPtr->lastOutput);
+
+		ImGui::PopID();
+	}
+
+private:
+	std::string label;
+	const PIDController* pidPtr;
+	float maxTorque;
+	float y_Size;
+
+	int offset = 0;
+	std::vector<float> historyError;
+	std::vector<float> historyP;
+	std::vector<float> historyI;
+	std::vector<float> historyD;
+	std::vector<float> historyTorque;
+};
 
 class Imgui_layer
 {

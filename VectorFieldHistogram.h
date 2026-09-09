@@ -105,7 +105,7 @@ public:
         float localHorizon = glm::clamp(d_thresh + 2.0f, 2.0f, 10.0f);
 
         float minHitDist = localHorizon;
-        const float voxelRadius = 0.0f;
+        const float voxelRadius = 0.5f;
 
         for (const auto& obsPt : foundedPoints)
         {

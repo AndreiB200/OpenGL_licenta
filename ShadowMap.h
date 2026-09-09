@@ -11,12 +11,12 @@ class ShadowMap
 {
 public:
 	unsigned int depthMapFBO, depthMap, shadow_WIDTH, shadow_HEIGHT;
-	unsigned int shadowRes = 1024;
+	unsigned int shadowRes = 4096;
 
 	glm::mat4 lightProjection, lightView, lightSpaceMatrix;
 	glm::vec3 lightPos;
 	float near_plane = 0.1f, far_plane = 100.0f;
-	float frustrum = 40.0f;
+	float frustrum = 80.0f;
 
 	Shader shader = Shader("shadow.vert", "shadow.frag");
 	Shader debugging = Shader("shadow_debug.vert", "shadow_debug.frag");
@@ -68,7 +68,7 @@ public:
 
 		lightProjection = glm::ortho(-frustrum, frustrum, -frustrum, frustrum, near_plane, far_plane);
 		//lightProjection = glm::perspective(glm::radians(90.0f), 1.0f, near_plane, far_plane);
-		lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		lightView = glm::lookAt(lightPos, lightPos - glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		lightSpaceMatrix = lightProjection * lightView;
 
 		shader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
@@ -76,7 +76,7 @@ public:
 		glViewport(0, 0, shadow_WIDTH, shadow_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 		glClear(GL_DEPTH_BUFFER_BIT);
-
+		glCullFace(GL_FRONT);
 		for (int i = 0; i < models.size(); i++)
 			models[i]->drawShadow(shader);
 

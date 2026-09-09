@@ -19,7 +19,7 @@ public:
 	float normal[3] = {0.0f,0.0f,0.0f};
 	float color[3] = {0.7f, 0.7f, 0.7f};
 
-	float shadowUp = 0.000f, shadowBias = 0.0001f, multipalyer = 0.1f, ambient_occlusion = 1.0f, lightMultiplayer = 1.0f;
+	float shadowUp = 0.003f, shadowBias = 0.0001f, multipalyer = 0.0f, ambient_occlusion = 1.0f, lightMultiplayer = 1.0f;
 	int pcfSize = 3;
 
 	int index = 0;
@@ -151,7 +151,7 @@ public:
     float aoMultiplayer = 5.0f;
     float aoRadius = 0.5f;
     float aoBias = 0.025f;
-    float lightWidth = 4000.0f;
+    float lightWidth = 100.0f;
 
     // Drone target and power
     float droneTargetHeight = 0.0f;
@@ -310,11 +310,25 @@ public:
         pidsEdit->addWidget(new DragFloat("ki", &pidZ.ki, 0.05f));
         pidsEdit->addWidget(new DragFloat("kd", &pidZ.kd, 0.05f));
 
+        
+        TreeNode* pidsGraphs = new TreeNode("Graphs for PIDs"); float maxGraph = 5.0f;
+        TreeNode* pidGraph_pitch = new TreeNode("Pitch");
+        pidGraph_pitch->addWidget(new PIDDebuggerWidget("Pitch:", &pidPitch, maxGraph));
+        TreeNode* pidGraph_roll = new TreeNode("Roll");
+        pidGraph_roll->addWidget(new PIDDebuggerWidget("Roll:", &pidRoll, maxGraph));
+        TreeNode* pidGraph_yaw = new TreeNode("Yaw");
+        pidGraph_yaw->addWidget(new PIDDebuggerWidget("Yaw:", &pidYaw, maxGraph));
+        pidsGraphs->addWidget(pidGraph_pitch);
+        pidsGraphs->addWidget(pidGraph_roll);
+        pidsGraphs->addWidget(pidGraph_yaw);
+
         droneHeader->addWidget(positionAndQuat);
         droneHeader->addWidget(velocityAndData);
         droneHeader->addWidget(motorData);
         droneHeader->addWidget(cameraAndSensors);
         droneHeader->addWidget(pidsEdit);
+        droneHeader->addWidget(pidsGraphs);
+
         Imgui_layer::getInstance().addWidget(droneHeader);
 
 
@@ -338,7 +352,7 @@ public:
         shadowNode->addWidget(new DragFloat("FarPlane", &shadow->far_plane, 0.1f));
         shadowNode->addWidget(new DragFloat("Frustrum", &shadow->frustrum, 0.1f));
         shadowNode->addWidget(new DragFloat("shadowUp", &shadowUp, 0.0001f));
-        shadowNode->addWidget(new DragFloat("shadowBias", &shadowBias, 0.000f));
+        shadowNode->addWidget(new DragFloat("shadowBias", &shadowBias, 0.001f));
         shadowNode->addWidget(new InputInt("pcfSize", &pcfSize, 0, 20));
         shadowNode->addWidget(new DragFloat("shadow contrast", &multipalyer, 0.1f));
 
@@ -430,7 +444,7 @@ public:
 		shader.setFloat("ao", ambient_occlusion);
 	}
 
-
+    
 };
 
 

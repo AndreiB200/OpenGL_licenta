@@ -106,6 +106,17 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+glm::vec3 getPositionInFrontOfCamera(const glm::mat4& viewMatrix, const glm::vec3& offset) {
+    glm::mat4 invView = glm::inverse(viewMatrix);
+
+    glm::vec3 cameraPos = glm::vec3(invView[3]);
+    glm::vec3 cameraRight = glm::vec3(invView[0]);
+    glm::vec3 cameraUp = glm::vec3(invView[1]);
+    glm::vec3 cameraForward = -glm::vec3(invView[2]);
+    glm::vec3 results = cameraPos + offset;
+    results.y = offset.y;
+    return results;
+}
 
 unsigned int sphereVAO = 0;
 unsigned int indexCount;
@@ -495,9 +506,10 @@ void renderQuad()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 }
+
 void renderColorAndDepth(Window &myWindow, Shader &quadShader, glm::mat4 view)
 {
-    glViewport(0, HEIGHT / 2, WIDTH / 2, HEIGHT / 2);
+    glViewport(0, 0, WIDTH, HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // check FBO
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -676,7 +688,7 @@ int main()
     // lights
     // ------
     glm::vec3 lightPositions[] = {
-        glm::vec3(-3.0f,  5.0f, 3.0f)
+        glm::vec3(0.0f,  50.0f, 0.0f)
     };
     glm::vec3 lightColors[] = {
         glm::vec3(1.0f, 1.0f, 1.0f)
@@ -789,6 +801,7 @@ int main()
         glBindFramebuffer(GL_FRAMEBUFFER, gBuffer); // check FBO
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glCullFace(GL_BACK);
         glEnable(GL_DEPTH_TEST);
 
         glDepthFunc(GL_LEQUAL);
@@ -803,8 +816,8 @@ int main()
         geometryShaderBuffer.setInt("normalMap", 6);
         geometryShaderBuffer.setInt("roughnessMap", 7);
 
-        glm::vec3 newPos = lightPositions[0];
-        shadow.lightPos = lightPositions[0];
+        glm::vec3 newPos = getPositionInFrontOfCamera(view, lightPositions[0]);
+        shadow.lightPos = newPos;
         lightColors[0] = glm::vec3(imgui_helper.lightMultiplayer);
 
         
