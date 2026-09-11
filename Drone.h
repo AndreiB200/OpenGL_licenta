@@ -418,10 +418,11 @@ public:
             vfhRes = vfhPlanner.computeHybridAPF_EGOPlanner(currentPos, targetPosition, collisionYaw, lidarVoxelGrid, segmentPoints, glm::length(linearVel),
                 preventiveSpeed, imgui_helper->learningRate, imgui_helper->SENSITIVITY_size, imgui_helper->SENSITIVITY_repulsion, imgui_helper->smoothness);
 
-            droneDirection = currentPos + vfhRes;
+            droneDirection = vfhRes;
 
             saveSimulationData(segmentPoints);
         }
+        else droneDirection = targetPosition;
 
         //droneDirection = targetPosition; // FORMULA NORMALA CORECTA !
         

@@ -88,7 +88,7 @@ public:
 
     void addPoints(const std::vector<glm::vec3>& points, glm::vec3 cameraPos) {
         for (const auto& pt : points) {
-            if (glm::length(pt - cameraPos) < 15.0f) {
+            if (glm::length(pt - cameraPos) < 10.0f) {
                 addPoint(pt);
             }
         }

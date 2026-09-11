@@ -284,50 +284,67 @@ public:
         cameraAndSensors->addWidget(new ImGUI_text("Sensor index"));
         cameraAndSensors->addWidget(new InputInt("Map Select", &sensorID, 0, 3));
 
-        TreeNode* pidsEdit = new TreeNode("PIDs Edit");
-        pidsEdit->addWidget(new ImGUI_text("pidPitch"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidPitch.kp, 0.05f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidPitch.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidPitch.kd, 0.05f));
-        pidsEdit->addWidget(new ImGUI_text("pidRoll"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidRoll.kp, 0.05f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidRoll.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidRoll.kd, 0.05f));
-        pidsEdit->addWidget(new ImGUI_text("pidYaw"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidYaw.kp, 0.05f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidYaw.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidYaw.kd, 0.05f));
-        pidsEdit->addWidget(new ImGUI_text("pidHeight"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidHeight.kp, 0.05f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidHeight.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidHeight.kd, 0.05f));
-        pidsEdit->addWidget(new ImGUI_text("pid X axis"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidX.kp, 0.01f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidX.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidX.kd, 0.05f));
-        pidsEdit->addWidget(new ImGUI_text("pid Z axis"));
-        pidsEdit->addWidget(new DragFloat("kp", &pidZ.kp, 0.05f));
-        pidsEdit->addWidget(new DragFloat("ki", &pidZ.ki, 0.05f));
-        pidsEdit->addWidget(new DragFloat("kd", &pidZ.kd, 0.05f));
+
+        TreeNode* pidsEdit = new TreeNode("PIDs Edit"); float maxGraph = 5.0f;
+
+        TreeNode* pidPitch_node = new TreeNode("pidPitch");
+        pidPitch_node->addWidget(new DragFloat("kp", &pidPitch.kp, 0.05f));
+        pidPitch_node->addWidget(new DragFloat("ki", &pidPitch.ki, 0.05f));
+        pidPitch_node->addWidget(new DragFloat("kd", &pidPitch.kd, 0.05f));
+        TreeNode* pidGraph_pitch = new TreeNode("Graph Pitch");
+        pidGraph_pitch->addWidget(new PIDDebuggerWidget("Pitch:", &pidPitch, maxGraph));
+        pidPitch_node->addWidget(pidGraph_pitch);
+
+        TreeNode* pidRoll_node = new TreeNode("pidRoll");
+        pidRoll_node->addWidget(new DragFloat("kp", &pidRoll.kp, 0.05f));
+        pidRoll_node->addWidget(new DragFloat("ki", &pidRoll.ki, 0.05f));
+        pidRoll_node->addWidget(new DragFloat("kd", &pidRoll.kd, 0.05f));
+        TreeNode* pidGraph_roll = new TreeNode("Graph Roll");
+        pidGraph_roll->addWidget(new PIDDebuggerWidget("Roll:", &pidRoll, maxGraph));
+        pidRoll_node->addWidget(pidGraph_roll);
+
+        TreeNode* pidYaw_node = new TreeNode("pidYaw");
+        pidYaw_node->addWidget(new DragFloat("kp", &pidYaw.kp, 0.05f));
+        pidYaw_node->addWidget(new DragFloat("ki", &pidYaw.ki, 0.05f));
+        pidYaw_node->addWidget(new DragFloat("kd", &pidYaw.kd, 0.05f));
+        TreeNode* pidGraph_yaw = new TreeNode("Graph Yaw");
+        pidGraph_yaw->addWidget(new PIDDebuggerWidget("Yaw:", &pidYaw, maxGraph));
+        pidYaw_node->addWidget(pidGraph_yaw);
+
+        TreeNode* pidHeight_node = new TreeNode("pidHeight");
+        pidHeight_node->addWidget(new DragFloat("kp", &pidHeight.kp, 0.05f));
+        pidHeight_node->addWidget(new DragFloat("ki", &pidHeight.ki, 0.05f));
+        pidHeight_node->addWidget(new DragFloat("kd", &pidHeight.kd, 0.05f));
+        TreeNode* pidGraph_height = new TreeNode("Graph Height");
+        pidGraph_height->addWidget(new PIDDebuggerWidget("Height:", &pidHeight, maxGraph));
+        pidHeight_node->addWidget(pidGraph_height);
+
+        TreeNode* pidXaxis_node = new TreeNode("pid X axis");
+        pidXaxis_node->addWidget(new DragFloat("kp", &pidX.kp, 0.05f));
+        pidXaxis_node->addWidget(new DragFloat("ki", &pidX.ki, 0.05f));
+        pidXaxis_node->addWidget(new DragFloat("kd", &pidX.kd, 0.05f));
+        TreeNode* pidGraph_xaxis = new TreeNode("Graph X axis");
+        pidGraph_xaxis->addWidget(new PIDDebuggerWidget("X axis:", &pidX, maxGraph));
+        pidXaxis_node->addWidget(pidGraph_xaxis);
+
+        TreeNode* pidZaxis_node = new TreeNode("pid Z axis");
+        pidZaxis_node->addWidget(new DragFloat("kp", &pidZ.kp, 0.05f));
+        pidZaxis_node->addWidget(new DragFloat("ki", &pidZ.ki, 0.05f));
+        pidZaxis_node->addWidget(new DragFloat("kd", &pidZ.kd, 0.05f));
+        TreeNode* pidGraph_zaxis = new TreeNode("Graph Z axis");
+        pidGraph_zaxis->addWidget(new PIDDebuggerWidget("Z axis:", &pidZ, maxGraph));
+        pidZaxis_node->addWidget(pidGraph_zaxis);
+
+        pidsEdit->addWidget(pidPitch_node); pidsEdit->addWidget(pidRoll_node); pidsEdit->addWidget(pidYaw_node);
+        pidsEdit->addWidget(pidHeight_node); pidsEdit->addWidget(pidXaxis_node); pidsEdit->addWidget(pidZaxis_node);
 
         
-        TreeNode* pidsGraphs = new TreeNode("Graphs for PIDs"); float maxGraph = 5.0f;
-        TreeNode* pidGraph_pitch = new TreeNode("Pitch");
-        pidGraph_pitch->addWidget(new PIDDebuggerWidget("Pitch:", &pidPitch, maxGraph));
-        TreeNode* pidGraph_roll = new TreeNode("Roll");
-        pidGraph_roll->addWidget(new PIDDebuggerWidget("Roll:", &pidRoll, maxGraph));
-        TreeNode* pidGraph_yaw = new TreeNode("Yaw");
-        pidGraph_yaw->addWidget(new PIDDebuggerWidget("Yaw:", &pidYaw, maxGraph));
-        pidsGraphs->addWidget(pidGraph_pitch);
-        pidsGraphs->addWidget(pidGraph_roll);
-        pidsGraphs->addWidget(pidGraph_yaw);
 
         droneHeader->addWidget(positionAndQuat);
         droneHeader->addWidget(velocityAndData);
         droneHeader->addWidget(motorData);
         droneHeader->addWidget(cameraAndSensors);
         droneHeader->addWidget(pidsEdit);
-        droneHeader->addWidget(pidsGraphs);
 
         Imgui_layer::getInstance().addWidget(droneHeader);
 

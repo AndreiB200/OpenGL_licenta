@@ -89,19 +89,26 @@ public:
         const float a_max = actualSpeed;
         const float stopThreshold = 4.0f;
 
+        // static variable... we have only 1 drone
+        static glm::vec3 prevP1 = agentPos;
+        static glm::vec3 prevP2 = agentPos;
+        static glm::vec3 prevP3 = agentPos;
+        static glm::vec3 prevMoveDirection(0.0f);
+        static bool isFirstFrame = true;
+
         glm::vec3 dirToGlobalTarget = targetPos - agentPos;
         float distToGlobalTarget = glm::length(dirToGlobalTarget);
 
         if (distToGlobalTarget < stopThreshold) {
-            return glm::vec3(0.0f);
+            isFirstFrame = true;
+            prevMoveDirection = glm::vec3(0.0f);
+            return targetPos;
         }
 
         std::vector<glm::vec3> foundedPoints = lidarVoxelGrid.getUniqueCenters();
-
         dirToGlobalTarget = glm::normalize(dirToGlobalTarget);
 
         float d_thresh = d_max + (actualSpeed * actualSpeed) / (2.0f * a_max);
-
         float localHorizon = glm::clamp(d_thresh + 2.0f, 2.0f, 10.0f);
 
         float minHitDist = localHorizon;
@@ -110,7 +117,6 @@ public:
         for (const auto& obsPt : foundedPoints)
         {
             glm::vec3 toObs = obsPt - agentPos;
-
             float projDist = glm::dot(toObs, dirToGlobalTarget);
 
             if (projDist > 0.0f && projDist < localHorizon)
@@ -121,7 +127,6 @@ public:
                 if (perpendicularDist < voxelRadius)
                 {
                     float hitDist = projDist - voxelRadius;
-
                     if (hitDist < minHitDist) {
                         minHitDist = hitDist;
                     }
@@ -129,19 +134,27 @@ public:
             }
         }
 
+
         if (minHitDist < localHorizon) {
-            const float d_margin = 0.8f;
-            localHorizon = std::max(0.5f, minHitDist - d_margin);
+            localHorizon = std::max(1.0f, minHitDist);
         }
 
         glm::vec3 localTarget = agentPos + dirToGlobalTarget * localHorizon;
 
         glm::vec3 defaultP1 = agentPos + (localTarget - agentPos) * (1.0f / 3.0f);
         glm::vec3 defaultP2 = agentPos + (localTarget - agentPos) * (2.0f / 3.0f);
+        glm::vec3 defaultP3 = localTarget;
 
-        glm::vec3 currentP1 = defaultP1;
-        glm::vec3 currentP2 = defaultP2;
-        glm::vec3 currentP3 = localTarget;
+        if (isFirstFrame) {
+            prevP1 = defaultP1;
+            prevP2 = defaultP2;
+            prevP3 = defaultP3;
+            isFirstFrame = false;
+        }
+
+        glm::vec3 currentP1 = glm::mix(defaultP1, prevP1, 0.5f);
+        glm::vec3 currentP2 = glm::mix(defaultP2, prevP2, 0.5f);
+        glm::vec3 currentP3 = glm::mix(defaultP3, prevP3, 0.5f);
 
         BSplineCubic spline = { agentPos, currentP1, currentP2, currentP3 };
 
@@ -150,18 +163,17 @@ public:
         glm::vec3 forceP3(0.0f);
         float weightP1Sum = 0.0f;
         float weightP2Sum = 0.0f;
-        float weightP3Sum = 0.0f;       
+        float weightP3Sum = 0.0f;
 
         const int sampleCount = 20;
         for (int i = 0; i <= sampleCount; ++i)
         {
             float t = static_cast<float>(i) / static_cast<float>(sampleCount);
-           
 
             glm::vec3 ptOnCurve = spline.evaluate(t);
             float w1 = 3.0f * (1.0f - t) * (1.0f - t) * t;
             float w2 = 3.0f * (1.0f - t) * t * t;
-            float w3 = t* t* t;
+            float w3 = t * t * t;
 
             for (const auto& obsPt : foundedPoints)
             {
@@ -178,7 +190,7 @@ public:
                     forceP1 += egoForce * w1;
                     forceP2 += egoForce * w2;
                     forceP3 += egoForce * w3;
-                    
+
                     weightP1Sum += w1;
                     weightP2Sum += w2;
                     weightP3Sum += w3;
@@ -186,7 +198,6 @@ public:
             }
         }
 
-        
         if (weightP1Sum > 0.001f) {
             currentP1 += (forceP1 / weightP1Sum) * learningRate;
         }
@@ -197,6 +208,10 @@ public:
             currentP3 += (forceP3 / weightP3Sum) * learningRate;
         }
 
+        prevP1 = currentP1;
+        prevP2 = currentP2;
+        prevP3 = currentP3;
+
         spline.P1 = currentP1;
         spline.P2 = currentP2;
         spline.P3 = currentP3;
@@ -204,20 +219,28 @@ public:
         float t_lookahead = 0.25f;
         glm::vec3 targetWayPoint = spline.evaluate(t_lookahead);
 
-        glm::vec3 moveDirection = targetWayPoint - agentPos;
-        float moveLen = glm::length(moveDirection);
+        glm::vec3 rawMoveDirection = targetWayPoint - agentPos;
+        glm::vec3 moveDirection(0.0f);
+
+        float moveLen = glm::length(rawMoveDirection);
 
         if (moveLen > 0.001f) {
-            moveDirection = glm::normalize(moveDirection) * k_att;
+            rawMoveDirection = glm::normalize(rawMoveDirection) * glm::clamp(k_att * moveLen, 0.0f, k_att);
+
+            float alpha = 0.05f;
+            moveDirection = glm::mix(prevMoveDirection, rawMoveDirection, alpha);
+            prevMoveDirection = moveDirection;
+
             targetYaw = std::atan2(moveDirection.x, moveDirection.z);
         }
         else {
             moveDirection = glm::vec3(0.0f);
+            prevMoveDirection = glm::vec3(0.0f);
         }
 
         splineSegment = generateSplineVertices(spline);
 
-        return moveDirection;
+        return agentPos + moveDirection;
     }
 
     std::vector<glm::vec3> generateSplineVertices(BSplineCubic& spline)

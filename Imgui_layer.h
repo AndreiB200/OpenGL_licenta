@@ -291,7 +291,7 @@ public:
 		ImGui::PlotLines("D", historyD.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
 
 		ImGui::Separator();
-		ImGui::PlotLines("Torque Output", historyTorque.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
+		ImGui::PlotLines("Output", historyTorque.data(), (int)HISTORY_SIZE, offset, nullptr, -maxTorque, maxTorque, ImVec2(0, y_Size));
 		ImGui::Separator();
 
 		ImGui::Text("Integral Accumulator: %.3f", pidPtr->integral);
